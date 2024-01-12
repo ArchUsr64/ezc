@@ -1,2 +1,2 @@
 # ezc
-A minimal C like programming language
+EZC (pronounced Easy-C) is a minimal C like programming language
