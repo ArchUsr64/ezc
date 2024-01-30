@@ -1,9 +1,12 @@
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
+	Keyword(Reserved),
+
 	/// TODO: Change this to a string slice
 	Identifier(String),
 	Const(String),
-	If,
+
+	// Brackets
 	LeftParenthesis,
 	RightParenthesis,
 	LeftBrace,
@@ -54,7 +57,11 @@ pub enum Token {
 	Question,
 	Colon,
 	Comma,
+}
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum Reserved {
+	If,
 	Int,
 }
 
@@ -228,22 +235,21 @@ pub fn tokenize(input_stream: &str) -> Vec<Token> {
 /// TODO: should use a hash map here
 fn keywords(id: &str) -> Option<Token> {
 	match id {
-		"if" => Some(Token::If),
-		"int" => Some(Token::Int),
+		"if" => Some(Token::Keyword(Reserved::If)),
+		"int" => Some(Token::Keyword(Reserved::Int)),
 		_ => None,
 	}
 }
 
 mod test {
-	use super::*;
 	#[allow(unused_imports)]
-	use Token::*;
+	use super::{Reserved::*, Token::*, *};
 	#[test]
 	fn whitespace_handling() {
 		assert_eq!(Vec::<Token>::new(), tokenize(""));
 		assert_eq!(
 			vec![
-				Int,
+				Keyword(Int),
 				Identifier("xyz".into()),
 				Equal,
 				Const("1".into()),
@@ -260,7 +266,7 @@ mod test {
 				Semicolon,
 				Const("0b1234makethisconst".into()),
 				Semicolon,
-				If,
+				Keyword(If),
 				LeftParenthesis,
 				Identifier("xyz".into()),
 				RightParenthesis,
@@ -293,7 +299,7 @@ mod test {
 	fn operators() {
 		assert_eq!(
 			vec![
-				Int,
+				Keyword(Int),
 				Identifier("x".into()),
 				Equal,
 				Const("6".into()),
@@ -328,7 +334,7 @@ mod test {
 		);
 		assert_eq!(
 			vec![
-				Int,
+				Keyword(Int),
 				Identifier("x".into()),
 				Equal,
 				Const("6".into()),
