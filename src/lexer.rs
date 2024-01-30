@@ -70,6 +70,23 @@ pub fn tokenize(input_stream: &str) -> Vec<Token> {
 		if current.is_whitespace() {
 			continue;
 		}
+		// Handle line comments
+		if current == '/' && stream_iter.peek().is_some_and(|x| *x == '/') {
+			while stream_iter.next_if(|x| *x != '\n').is_some() {}
+			line_number += 1;
+			continue;
+		}
+		if current == '/' && stream_iter.next_if(|x| *x == '*').is_some() {
+			loop {
+				if let Some('*') = stream_iter.next()
+					&& Some(&'/') == stream_iter.peek()
+				{
+					stream_iter.next();
+					break;
+				}
+			}
+			continue;
+		}
 		let matched_token = match current {
 			char if char.is_numeric() => {
 				let mut const_buffer = char.to_string();
@@ -260,6 +277,11 @@ mod test {
 
 				ident_test1234;
 				0b1234makethisconst;
+
+				// This should be ignored / since it's a line comment
+				/*
+				This is a block comment * so ignore * / this as well //
+				*/
 					if ( xyz){
 					xyz= 0 ;
 				}
