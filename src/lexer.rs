@@ -62,7 +62,11 @@ pub fn tokenize(input_stream: &str) -> Vec<Token> {
 	let mut tokens = Vec::new();
 	let is_identifier_symbol = |char: char| char.is_alphanumeric() || char == '_';
 	let mut stream_iter = input_stream.chars().peekable();
+	let mut line_number = 0;
 	while let Some(current) = stream_iter.next() {
+		if current == '\n' {
+			line_number += 1;
+		}
 		if current.is_whitespace() {
 			continue;
 		}
@@ -197,7 +201,7 @@ pub fn tokenize(input_stream: &str) -> Vec<Token> {
 			')' => Token::RightParenthesis,
 			'{' => Token::LeftBrace,
 			'}' => Token::RightBrace,
-			x => todo!("{}", x),
+			x => todo!("{x} at line#{line_number}"),
 		};
 		tokens.push(matched_token);
 	}
@@ -250,7 +254,7 @@ mod test {
 				r"
 				int xyz = 1, a,b, c , d;
 
-				if ( xyz){
+					if ( xyz){
 					xyz= 0 ;
 				}
 			"
