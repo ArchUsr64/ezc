@@ -73,7 +73,7 @@ pub fn tokenize(input_stream: &str) -> Vec<Token> {
 		let matched_token = match current {
 			char if char.is_numeric() => {
 				let mut const_buffer = char.to_string();
-				while let Some(char) = stream_iter.next_if(|i| i.is_numeric()) {
+				while let Some(char) = stream_iter.next_if(|i| i.is_alphanumeric()) {
 					const_buffer.push(char);
 				}
 				Token::Const(const_buffer)
@@ -239,6 +239,10 @@ mod test {
 				Comma,
 				Identifier("d".into()),
 				Semicolon,
+				Identifier("ident_test1234".into()),
+				Semicolon,
+				Const("0b1234makethisconst".into()),
+				Semicolon,
 				If,
 				LeftParenthesis,
 				Identifier("xyz".into()),
@@ -254,6 +258,8 @@ mod test {
 				r"
 				int xyz = 1, a,b, c , d;
 
+				ident_test1234;
+				0b1234makethisconst;
 					if ( xyz){
 					xyz= 0 ;
 				}
