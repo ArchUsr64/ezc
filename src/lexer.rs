@@ -9,7 +9,52 @@ pub enum Token {
 	LeftBrace,
 	RightBrace,
 	Semicolon,
+
+	// Operators
+	// Arithmetic
+	Plus,
+	Minus,
+	Star,
+	Slash,
+	Percent,
+	PlusPlus,
+	MinusMinus,
+	// Comparison
+	EqualEqual,
+	BangEqual,
+	Greater,
+	Less,
+	GreaterEqual,
+	LessEqual,
+	// Logical
+	Bang,
+	AmpAmp,
+	PipePipe,
+	// Bitwise
+	Tilde,
+	Amp,
+	Pipe,
+	Caret,
+	LessLess,
+	GreaterGreater,
+	// Assignment
 	Equal,
+	PlusEqual,
+	MinusEqual,
+	StarEqual,
+	SlashEqual,
+	PercentEqual,
+	AmpEqual,
+	PipeEqual,
+	CaretEqual,
+	LessLessEqual,
+	GreaterGreaterEqual,
+	// Other
+	Arrow,
+	Question,
+	Colon,
+	Comma,
+
 	Int,
 }
 
@@ -37,7 +82,116 @@ pub fn tokenize(input_stream: &str) -> Vec<Token> {
 				}
 				keywords(&ident_buffer).unwrap_or(Token::Identifier(ident_buffer))
 			}
-			'=' => Token::Equal,
+			'+' => {
+				if stream_iter.next_if(|&i| i == '=').is_some() {
+					Token::PlusEqual
+				} else if stream_iter.next_if(|&i| i == '+').is_some() {
+					Token::PlusPlus
+				} else {
+					Token::Plus
+				}
+			}
+			'-' => {
+				if stream_iter.next_if(|&i| i == '=').is_some() {
+					Token::MinusEqual
+				} else if stream_iter.next_if(|&i| i == '-').is_some() {
+					Token::MinusMinus
+				} else if stream_iter.next_if(|&i| i == '>').is_some() {
+					Token::Arrow
+				} else {
+					Token::Minus
+				}
+			}
+			'=' => {
+				if stream_iter.next_if(|&i| i == '=').is_some() {
+					Token::EqualEqual
+				} else {
+					Token::Equal
+				}
+			}
+			'!' => {
+				if stream_iter.next_if(|&i| i == '=').is_some() {
+					Token::BangEqual
+				} else {
+					Token::Bang
+				}
+			}
+			'*' => {
+				if stream_iter.next_if(|&i| i == '=').is_some() {
+					Token::StarEqual
+				} else {
+					Token::Star
+				}
+			}
+			'/' => {
+				if stream_iter.next_if(|&i| i == '=').is_some() {
+					Token::SlashEqual
+				} else {
+					Token::Slash
+				}
+			}
+			'%' => {
+				if stream_iter.next_if(|&i| i == '=').is_some() {
+					Token::PercentEqual
+				} else {
+					Token::Percent
+				}
+			}
+			'<' => {
+				if stream_iter.next_if(|&i| i == '=').is_some() {
+					Token::LessEqual
+				} else if stream_iter.next_if(|&i| i == '<').is_some() {
+					if stream_iter.next_if(|&i| i == '=').is_some() {
+						Token::LessLessEqual
+					} else {
+						Token::LessLess
+					}
+				} else {
+					Token::Less
+				}
+			}
+			'>' => {
+				if stream_iter.next_if(|&i| i == '=').is_some() {
+					Token::GreaterEqual
+				} else if stream_iter.next_if(|&i| i == '>').is_some() {
+					if stream_iter.next_if(|&i| i == '=').is_some() {
+						Token::GreaterGreaterEqual
+					} else {
+						Token::GreaterGreater
+					}
+				} else {
+					Token::Greater
+				}
+			}
+			'&' => {
+				if stream_iter.next_if(|&i| i == '=').is_some() {
+					Token::AmpEqual
+				} else if stream_iter.next_if(|&i| i == '&').is_some() {
+					Token::AmpAmp
+				} else {
+					Token::Amp
+				}
+			}
+			'|' => {
+				if stream_iter.next_if(|&i| i == '=').is_some() {
+					Token::PipeEqual
+				} else if stream_iter.next_if(|&i| i == '|').is_some() {
+					Token::PipePipe
+				} else {
+					Token::Pipe
+				}
+			}
+			'^' => {
+				if stream_iter.next_if(|&i| i == '=').is_some() {
+					Token::CaretEqual
+				} else {
+					Token::Caret
+				}
+			}
+			'?' => Token::Question,
+			':' => Token::Colon,
+			'~' => Token::Tilde,
+			',' => Token::Comma,
 			';' => Token::Semicolon,
 			'(' => Token::LeftParenthesis,
 			')' => Token::RightParenthesis,
@@ -59,36 +213,173 @@ fn keywords(id: &str) -> Option<Token> {
 	}
 }
 
-#[test]
-fn lexer() {
+mod test {
 	use super::*;
+	#[allow(unused_imports)]
 	use Token::*;
-	assert_eq!(Vec::<Token>::new(), tokenize(""));
-	assert_eq!(
-		vec![
-			Int,
-			Identifier("xyz".to_string()),
-			Equal,
-			Const("1".to_string()),
-			Semicolon,
-			If,
-			LeftParenthesis,
-			Identifier("xyz".to_string()),
-			RightParenthesis,
-			LeftBrace,
-			Identifier("xyz".to_string()),
-			Equal,
-			Const("0".to_string()),
-			Semicolon,
-			RightBrace,
-		],
-		tokenize(
-			r"
-int xyz = 1;
-if (xyz){
-	xyz=0;
-}
+	#[test]
+	fn whitespace_handling() {
+		assert_eq!(Vec::<Token>::new(), tokenize(""));
+		assert_eq!(
+			vec![
+				Int,
+				Identifier("xyz".into()),
+				Equal,
+				Const("1".into()),
+				Comma,
+				Identifier("a".into()),
+				Comma,
+				Identifier("b".into()),
+				Comma,
+				Identifier("c".into()),
+				Comma,
+				Identifier("d".into()),
+				Semicolon,
+				If,
+				LeftParenthesis,
+				Identifier("xyz".into()),
+				RightParenthesis,
+				LeftBrace,
+				Identifier("xyz".into()),
+				Equal,
+				Const("0".into()),
+				Semicolon,
+				RightBrace,
+			],
+			tokenize(
+				r"
+				int xyz = 1, a,b, c , d;
+
+				if ( xyz){
+					xyz= 0 ;
+				}
 			"
+			)
+		);
+	}
+	#[test]
+	fn operators() {
+		assert_eq!(
+			vec![
+				Int,
+				Identifier("x".into()),
+				Equal,
+				Const("6".into()),
+				Semicolon,
+				Identifier("x".into()),
+				SlashEqual,
+				Const("3".into()),
+				Semicolon,
+				Identifier("x".into()),
+				PlusPlus,
+				Semicolon,
+				Identifier("x".into()),
+				MinusMinus,
+				Semicolon,
+				MinusMinus,
+				Identifier("x".into()),
+				Semicolon,
+				PlusPlus,
+				Identifier("x".into()),
+				Semicolon,
+			],
+			tokenize(
+				r"
+				int x = 6;
+				x /= 3;
+				x++;
+				x--;
+				--x;
+				++x;
+				"
+			)
+		);
+		assert_eq!(
+			vec![
+				Int,
+				Identifier("x".into()),
+				Equal,
+				Const("6".into()),
+				Semicolon,
+				Identifier("x".into()),
+				SlashEqual,
+				Const("3".into()),
+				Semicolon,
+				Identifier("x".into()),
+				PlusPlus,
+				Semicolon,
+				Identifier("x".into()),
+				MinusMinus,
+				Semicolon,
+				MinusMinus,
+				Identifier("x".into()),
+				Semicolon,
+				PlusPlus,
+				Identifier("x".into()),
+				Semicolon,
+			],
+			tokenize(
+				r"
+				int x = 6;
+				x /= 3;
+				x++;
+				x--;
+				--x;
+				++x;
+				"
+			)
+		);
+		assert_eq!(
+			vec![
+				// Arithmetic
+				Plus,
+				Minus,
+				Star,
+				Slash,
+				Percent,
+				PlusPlus,
+				MinusMinus,
+				// Comparison
+				EqualEqual,
+				BangEqual,
+				Greater,
+				Less,
+				GreaterEqual,
+				LessEqual,
+				// Logical
+				Bang,
+				AmpAmp,
+				PipePipe,
+				// Bitwise
+				Tilde,
+				Amp,
+				Pipe,
+				Caret,
+				LessLess,
+				GreaterGreater,
+				// Assignment
+				Equal,
+				PlusEqual,
+				MinusEqual,
+				StarEqual,
+				SlashEqual,
+				PercentEqual,
+				AmpEqual,
+				PipeEqual,
+				CaretEqual,
+				LessLessEqual,
+				GreaterGreaterEqual,
+				// Other
+				Arrow,
+				Question,
+				Colon,
+			],
+			tokenize(
+				r"
+				+ - * / % ++ -- == != > < >= <= ! && || ~ & | ^ << >> = += -= *=
+				/= %= &= |= ^= <<= >>= -> ? :
+				"
+			)
 		)
-	);
+	}
 }
