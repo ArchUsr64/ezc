@@ -3,6 +3,8 @@ pub enum Token {
 	Keyword(Reserved),
 
 	/// TODO: Change this to a string slice
+	/// TODO: Add escape sequence support for String literals
+	Literal(String),
 	Identifier(String),
 	Const(String),
 
@@ -109,6 +111,14 @@ pub fn tokenize(input_stream: &str) -> Vec<Token> {
 					ident_buffer.push(char);
 				}
 				keywords(&ident_buffer).unwrap_or(Token::Identifier(ident_buffer))
+			}
+			'\"' => {
+				let mut literal_buffer = String::new();
+				while let Some(char) = stream_iter.next_if(|&i| i != '\"') {
+					literal_buffer.push(char);
+				}
+				stream_iter.next();
+				Token::Literal(literal_buffer)
 			}
 			'+' => {
 				if stream_iter.next_if(|&i| i == '=').is_some() {
@@ -308,6 +318,10 @@ mod test {
 				SlashEqual,
 				Const("3".into()),
 				Semicolon,
+				Identifier("y".into()),
+				Equal,
+				Literal("some literal".into()),
+				Semicolon,
 				Identifier("x".into()),
 				PlusPlus,
 				Semicolon,
@@ -322,14 +336,15 @@ mod test {
 				Semicolon,
 			],
 			tokenize(
-				r"
+				r#"
 				int x = 6;
 				x /= 3;
+				y = "some literal";
 				x++;
 				x--;
 				--x;
 				++x;
-				"
+				"#
 			)
 		);
 		assert_eq!(
@@ -419,5 +434,18 @@ mod test {
 				"
 			)
 		)
+	}
+	#[test]
+	fn string_literals() {
+		assert_eq!(vec![Literal("some".into())], tokenize(r#""some""#));
+		assert_eq!(
+			vec![Literal("some".into())],
+			tokenize(
+				r#"
+			"some"
+				
+			"#
+			)
+		);
 	}
 }
