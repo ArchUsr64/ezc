@@ -7,20 +7,22 @@ use parser::parse;
 
 const TEST_PROGRAM: &'static str = r"
 int x;
-int y;
-int z;
-z = y;
-z = 10;
-if (x + 9) {
-	y = 10 + z;
+x = 10;
+if (x == 5) {
+	x = x + 5;
+	int y;
+	y = 10;
+	if (y < 20) {
+		y = x + y;
+	}
 }
 return x;
 ";
 
 fn main() {
-	println!("{TEST_PROGRAM}");
+	println!("Source Code:\n{TEST_PROGRAM}");
 	let tokens = tokenize(&TEST_PROGRAM);
 	let parsed = parse(tokens.clone());
-	println!("{:?}", tokens);
-	println!("{:#?}", parsed.unwrap());
+	println!("Tokens: {:?}", tokens);
+	println!("Parse Tree: {:#?}", parsed.unwrap());
 }

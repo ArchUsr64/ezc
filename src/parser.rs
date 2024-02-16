@@ -79,11 +79,14 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 	fn stmts(&mut self) -> Option<Stmts> {
 		if self.next_eq(Token::Keyword(Reserved::If)) && self.next_eq(Token::LeftParenthesis) {
 			let expression = self.expression()?;
-			let stmts = (self.next_eq(Token::RightParenthesis) && self.next_eq(Token::LeftBrace))
-				.then_some(())
-				.map(|_| self.stmts())
-				.take_if(|_| self.next_eq(Token::RightBrace))??;
-			Some(Stmts::If(expression, Box::new(stmts)))
+			if !(self.next_eq(Token::RightParenthesis) && self.next_eq(Token::LeftBrace)) {
+				return None;
+			};
+			let mut stmts = Vec::new();
+			while let Some(stmt) = self.stmts() {
+				stmts.push(stmt);
+			}
+			Some(Stmts::If(expression, stmts)).take_if(|_| self.next_eq(Token::RightBrace))
 		} else if self.next_eq(Token::Keyword(Reserved::Int))
 			&& let Some(Token::Identifier(name)) =
 				self.tokens.next_if(|i| matches!(i, Token::Identifier(_)))
@@ -172,7 +175,7 @@ impl Program {
 
 #[derive(Clone, Debug)]
 pub enum Stmts {
-	If(Expression, Box<Stmts>),
+	If(Expression, Vec<Stmts>),
 	Decl(Ident),
 	Assignment(Ident, Expression),
 }
