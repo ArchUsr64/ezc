@@ -285,10 +285,14 @@ mod test {
 				Equal,
 				Const("0".into()),
 				Semicolon,
+				Identifier("a".into()),
+				Equal,
+				Literal("Literal_23".into()),
+				Semicolon,
 				RightBrace,
 			],
 			tokenize(
-				r"
+				r#"
 				int xyz = 1, a,b, c , d;
 
 				ident_test1234;
@@ -300,8 +304,9 @@ mod test {
 				*/
 					if ( xyz){
 					xyz= 0 ;
+					a = "Literal_23";
 				}
-			"
+			"#
 			)
 		);
 	}
