@@ -65,6 +65,7 @@ pub enum Token {
 pub enum Reserved {
 	If,
 	Int,
+	Return,
 }
 
 pub fn tokenize(input_stream: &str) -> Vec<Token> {
@@ -247,6 +248,7 @@ fn keywords(id: &str) -> Option<Token> {
 	match id {
 		"if" => Some(Token::Keyword(Reserved::If)),
 		"int" => Some(Token::Keyword(Reserved::Int)),
+		"return" => Some(Token::Keyword(Reserved::Return)),
 		_ => None,
 	}
 }
