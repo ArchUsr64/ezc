@@ -21,8 +21,8 @@ return x;
 
 fn main() {
 	println!("Source Code:\n{TEST_PROGRAM}");
-	let tokens = tokenize(&TEST_PROGRAM);
-	let parsed = parse(tokens.clone());
-	println!("Tokens: {:?}", tokens);
+	let lexer_output = tokenize(&TEST_PROGRAM);
+	let parsed = parse(lexer_output.clone());
+	println!("Tokens: {:#?}", lexer_output);
 	println!("Parse Tree: {:#?}", parsed.unwrap());
 }

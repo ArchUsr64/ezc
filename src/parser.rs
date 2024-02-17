@@ -11,9 +11,9 @@
 						|  Const
 */
 
-use std::{iter::Peekable, ops::RangeBounds};
+use std::iter::Peekable;
 
-use crate::lexer::{Reserved, Token};
+use crate::lexer::{LexerOutput, Reserved, Symbol, SymbolTable, Token};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BinaryOperation {
@@ -53,23 +53,31 @@ impl BinaryOperation {
 	}
 }
 
-pub fn parse(tokens: Vec<Token>) -> Option<Program> {
+// TODO: Error `Symbol` instead for better debuggability
+pub fn parse(lexer_output: LexerOutput) -> Result<Program, Option<Token>> {
+	let LexerOutput {
+		symbol_table,
+		symbol,
+	} = lexer_output;
 	let mut parser = Parser {
-		// TODO: use a symbol table to avoid this clone
-		tokens: tokens.iter().map(|i| i.clone()).peekable(),
+		tokens: symbol.iter().map(|Symbol { token, .. }| *token).peekable(),
+		symbol_table,
 	};
 	let mut statement_root = Vec::new();
 	while let Some(stmt) = parser.stmts() {
 		statement_root.push(stmt);
 	}
-	Some(Program {
+	Ok(Program {
 		statement_root,
-		return_value: parser.return_value()?,
+		return_value: parser
+			.return_value()
+			.ok_or_else(|| parser.tokens.peek().map(|i| *i))?,
 	})
 }
 
 struct Parser<I: Iterator<Item = Token>> {
 	tokens: Peekable<I>,
+	symbol_table: SymbolTable,
 }
 impl<I: Iterator<Item = Token>> Parser<I> {
 	#[inline]
@@ -129,7 +137,9 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 		match self.tokens.next_if(|i| matches!(i, Token::Identifier(_))) {
 			Some(Token::Identifier(name)) => Some(DirectValue::Ident(name)),
 			_ => match self.tokens.next_if(|i| matches!(i, Token::Const(_))) {
-				Some(Token::Const(value)) => Some(DirectValue::Const(Self::parse_const(value)?)),
+				Some(Token::Const(symbol_idx)) => {
+					Some(DirectValue::Const(self.parse_const(symbol_idx)?))
+				}
 				_ => None,
 			},
 		}
@@ -139,8 +149,11 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 			.next_if(|tk| BinaryOperation::from_token(tk).is_some())
 			.map(|tk| BinaryOperation::from_token(&tk))?
 	}
-	fn parse_const(value: String) -> Option<i32> {
-		let value = value.trim_start_matches('0');
+	fn parse_const(&self, symbol_idx: usize) -> Option<i32> {
+		let value = self
+			.symbol_table
+			.get_const(symbol_idx)?
+			.trim_start_matches('0');
 		if ('1'..='9').contains(&value.chars().nth(0)?) {
 			i32::from_str_radix(value, 10).ok()
 		} else {
@@ -155,23 +168,14 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 	}
 }
 
+#[allow(unused)]
 #[derive(Clone, Debug)]
 pub struct Program {
 	statement_root: Vec<Stmts>,
 	return_value: Expression,
 }
 
-// TODO: Swap this with a custom datatype referencing the symbol table
-type Ident = String;
-
-impl Program {
-	pub fn new() -> Self {
-		Self {
-			statement_root: Vec::new(),
-			return_value: Expression::DirectValue(DirectValue::Const(0)),
-		}
-	}
-}
+type Ident = usize;
 
 #[derive(Clone, Debug)]
 pub enum Stmts {
