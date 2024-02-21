@@ -53,36 +53,43 @@ impl BinaryOperation {
 	}
 }
 
-// TODO: Error `Symbol` instead for better debuggability
-pub fn parse(lexer_output: LexerOutput) -> Result<Program, Option<Token>> {
+pub fn parse(lexer_output: LexerOutput) -> Result<Program, Option<Symbol>> {
 	let LexerOutput {
 		symbol_table,
 		symbol,
 	} = lexer_output;
 	let mut parser = Parser {
-		tokens: symbol.iter().map(|Symbol { token, .. }| *token).peekable(),
+		symbols: symbol.iter().map(|i| *i).peekable(),
 		symbol_table,
 	};
 	let mut statement_root = Vec::new();
 	while let Some(stmt) = parser.stmts() {
 		statement_root.push(stmt);
 	}
-	Ok(Program {
+	let res = Ok(Program {
 		statement_root,
 		return_value: parser
 			.return_value()
-			.ok_or_else(|| parser.tokens.peek().map(|i| *i))?,
-	})
+			.ok_or_else(|| parser.symbols.peek().map(|i| *i))?,
+	});
+	if let Some(Symbol {
+		token: Token::EOF, ..
+	}) = parser.symbols.peek()
+	{
+		res
+	} else {
+		Err(parser.symbols.next())
+	}
 }
 
-struct Parser<I: Iterator<Item = Token>> {
-	tokens: Peekable<I>,
+struct Parser<I: Iterator<Item = Symbol>> {
+	symbols: Peekable<I>,
 	symbol_table: SymbolTable,
 }
-impl<I: Iterator<Item = Token>> Parser<I> {
+impl<I: Iterator<Item = Symbol>> Parser<I> {
 	#[inline]
 	fn next_eq(&mut self, needle: Token) -> bool {
-		self.tokens.next_if_eq(&needle).is_some()
+		self.symbols.next_if(|&i| i.token == needle).is_some()
 	}
 	fn stmts(&mut self) -> Option<Stmts> {
 		if self.next_eq(Token::Keyword(Reserved::If)) && self.next_eq(Token::LeftParenthesis) {
@@ -96,13 +103,21 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 			}
 			Some(Stmts::If(expression, stmts)).take_if(|_| self.next_eq(Token::RightBrace))
 		} else if self.next_eq(Token::Keyword(Reserved::Int))
-			&& let Some(Token::Identifier(name)) =
-				self.tokens.next_if(|i| matches!(i, Token::Identifier(_)))
+			&& let Some(Symbol {
+				token: Token::Identifier(name),
+				..
+			}) = self
+				.symbols
+				.next_if(|i| matches!(i.token, Token::Identifier(_)))
 			&& self.next_eq(Token::Semicolon)
 		{
 			Some(Stmts::Decl(name))
-		} else if let Some(Token::Identifier(name)) =
-			self.tokens.next_if(|i| matches!(i, Token::Identifier(_)))
+		} else if let Some(Symbol {
+			token: Token::Identifier(name),
+			..
+		}) = self
+			.symbols
+			.next_if(|i| matches!(i.token, Token::Identifier(_)))
 			&& self.next_eq(Token::Equal)
 			&& let Some(expression) = self.expression()
 			&& self.next_eq(Token::Semicolon)
@@ -116,7 +131,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 		self.next_eq(Token::Keyword(Reserved::Return))
 			.then_some(())
 			.and_then(|_| self.expression())
-			.take_if(|_| self.tokens.next_if_eq(&Token::Semicolon).is_some())
+			.take_if(|_| self.next_eq(Token::Semicolon))
 	}
 	fn expression(&mut self) -> Option<Expression> {
 		if let Some(l_value) = self.direct_value() {
@@ -134,20 +149,25 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 		None
 	}
 	fn direct_value(&mut self) -> Option<DirectValue> {
-		match self.tokens.next_if(|i| matches!(i, Token::Identifier(_))) {
+		match self
+			.symbols
+			.next_if(|i| matches!(i.token, Token::Identifier(_)))
+			.map(|i| i.token)
+		{
 			Some(Token::Identifier(name)) => Some(DirectValue::Ident(name)),
-			_ => match self.tokens.next_if(|i| matches!(i, Token::Const(_))) {
-				Some(Token::Const(symbol_idx)) => {
-					Some(DirectValue::Const(self.parse_const(symbol_idx)?))
-				}
+			_ => match self.symbols.next_if(|i| matches!(i.token, Token::Const(_))) {
+				Some(Symbol {
+					token: Token::Const(symbol_idx),
+					..
+				}) => Some(DirectValue::Const(self.parse_const(symbol_idx)?)),
 				_ => None,
 			},
 		}
 	}
 	fn binary_operation(&mut self) -> Option<BinaryOperation> {
-		self.tokens
-			.next_if(|tk| BinaryOperation::from_token(tk).is_some())
-			.map(|tk| BinaryOperation::from_token(&tk))?
+		self.symbols
+			.next_if(|tk| BinaryOperation::from_token(&tk.token).is_some())
+			.map(|tk| BinaryOperation::from_token(&tk.token))?
 	}
 	fn parse_const(&self, symbol_idx: usize) -> Option<i32> {
 		let value = self
@@ -171,8 +191,8 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 #[allow(unused)]
 #[derive(Clone, Debug)]
 pub struct Program {
-	statement_root: Vec<Stmts>,
-	return_value: Expression,
+	pub statement_root: Vec<Stmts>,
+	pub return_value: Expression,
 }
 
 type Ident = usize;

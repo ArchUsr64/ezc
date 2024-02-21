@@ -57,9 +57,11 @@ pub enum Token {
 	Question,
 	Colon,
 	Comma,
+
+	EOF,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Symbol {
 	pub token: Token,
 	pub line_number: usize,
@@ -308,6 +310,10 @@ pub fn tokenize(input_stream: &str) -> LexerOutput {
 			line_number,
 		});
 	}
+	symbol.push(Symbol {
+		token: Token::EOF,
+		line_number,
+	});
 	LexerOutput {
 		symbol_table,
 		symbol,
