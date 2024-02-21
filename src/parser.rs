@@ -88,39 +88,35 @@ struct Parser<I: Iterator<Item = Symbol>> {
 }
 impl<I: Iterator<Item = Symbol>> Parser<I> {
 	#[inline]
-	fn next_eq(&mut self, needle: Token) -> bool {
+	fn next_if_eq(&mut self, needle: Token) -> bool {
 		self.symbols.next_if(|&i| i.token == needle).is_some()
 	}
+	fn next_if(&mut self, func: impl Fn(Token) -> bool) -> Option<Token> {
+		self.symbols.next_if(|&i| func(i.token)).map(|i| i.token)
+	}
 	fn stmts(&mut self) -> Option<Stmts> {
-		if self.next_eq(Token::Keyword(Reserved::If)) && self.next_eq(Token::LeftParenthesis) {
+		if self.next_if_eq(Token::Keyword(Reserved::If)) && self.next_if_eq(Token::LeftParenthesis)
+		{
 			let expression = self.expression()?;
-			if !(self.next_eq(Token::RightParenthesis) && self.next_eq(Token::LeftBrace)) {
+			if !(self.next_if_eq(Token::RightParenthesis) && self.next_if_eq(Token::LeftBrace)) {
 				return None;
 			};
 			let mut stmts = Vec::new();
 			while let Some(stmt) = self.stmts() {
 				stmts.push(stmt);
 			}
-			Some(Stmts::If(expression, stmts)).take_if(|_| self.next_eq(Token::RightBrace))
-		} else if self.next_eq(Token::Keyword(Reserved::Int))
-			&& let Some(Symbol {
-				token: Token::Identifier(name),
-				..
-			}) = self
-				.symbols
-				.next_if(|i| matches!(i.token, Token::Identifier(_)))
-			&& self.next_eq(Token::Semicolon)
+			Some(Stmts::If(expression, stmts)).take_if(|_| self.next_if_eq(Token::RightBrace))
+		} else if self.next_if_eq(Token::Keyword(Reserved::Int))
+			&& let Some(Token::Identifier(name)) =
+				self.next_if(|i| matches!(i, Token::Identifier(_)))
+			&& self.next_if_eq(Token::Semicolon)
 		{
 			Some(Stmts::Decl(name))
-		} else if let Some(Symbol {
-			token: Token::Identifier(name),
-			..
-		}) = self
-			.symbols
-			.next_if(|i| matches!(i.token, Token::Identifier(_)))
-			&& self.next_eq(Token::Equal)
+		} else if let Some(Token::Identifier(name)) =
+			self.next_if(|i| matches!(i, Token::Identifier(_)))
+			&& self.next_if_eq(Token::Equal)
 			&& let Some(expression) = self.expression()
-			&& self.next_eq(Token::Semicolon)
+			&& self.next_if_eq(Token::Semicolon)
 		{
 			Some(Stmts::Assignment(name, expression))
 		} else {
@@ -128,10 +124,10 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 		}
 	}
 	fn return_value(&mut self) -> Option<Expression> {
-		self.next_eq(Token::Keyword(Reserved::Return))
+		self.next_if_eq(Token::Keyword(Reserved::Return))
 			.then_some(())
 			.and_then(|_| self.expression())
-			.take_if(|_| self.next_eq(Token::Semicolon))
+			.take_if(|_| self.next_if_eq(Token::Semicolon))
 	}
 	fn expression(&mut self) -> Option<Expression> {
 		if let Some(l_value) = self.direct_value() {
@@ -149,17 +145,12 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 		None
 	}
 	fn direct_value(&mut self) -> Option<DirectValue> {
-		match self
-			.symbols
-			.next_if(|i| matches!(i.token, Token::Identifier(_)))
-			.map(|i| i.token)
-		{
+		match self.next_if(|i| matches!(i, Token::Identifier(_))) {
 			Some(Token::Identifier(name)) => Some(DirectValue::Ident(name)),
-			_ => match self.symbols.next_if(|i| matches!(i.token, Token::Const(_))) {
-				Some(Symbol {
-					token: Token::Const(symbol_idx),
-					..
-				}) => Some(DirectValue::Const(self.parse_const(symbol_idx)?)),
+			_ => match self.next_if(|i| matches!(i, Token::Const(_))) {
+				Some(Token::Const(symbol_idx)) => {
+					Some(DirectValue::Const(self.parse_const(symbol_idx)?))
+				}
 				_ => None,
 			},
 		}
@@ -169,6 +160,7 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 			.next_if(|tk| BinaryOperation::from_token(&tk.token).is_some())
 			.map(|tk| BinaryOperation::from_token(&tk.token))?
 	}
+	/// TODO: Fix me!
 	fn parse_const(&self, symbol_idx: usize) -> Option<i32> {
 		let value = self
 			.symbol_table
