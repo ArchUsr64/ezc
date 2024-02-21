@@ -130,19 +130,24 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 			.take_if(|_| self.next_if_eq(Token::Semicolon))
 	}
 	fn expression(&mut self) -> Option<Expression> {
+		// TODO: Fix this ugly if else chain
 		if let Some(l_value) = self.direct_value() {
-			if let Some(binary_operation) = self.binary_operation()
-				&& let Some(r_value) = self.direct_value()
-			{
-				return Some(Expression::BinaryExpression(
-					l_value,
-					binary_operation,
-					r_value,
-				));
+			if let Some(binary_operation) = self.binary_operation() {
+				if let Some(r_value) = self.direct_value() {
+					Some(Expression::BinaryExpression(
+						l_value,
+						binary_operation,
+						r_value,
+					))
+				} else {
+					None
+				}
+			} else {
+				Some(Expression::DirectValue(l_value))
 			}
-			return Some(Expression::DirectValue(l_value));
+		} else {
+			None
 		}
-		None
 	}
 	fn direct_value(&mut self) -> Option<DirectValue> {
 		match self.next_if(|i| matches!(i, Token::Identifier(_))) {
