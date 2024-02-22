@@ -150,14 +150,12 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 		}
 	}
 	fn direct_value(&mut self) -> Option<DirectValue> {
-		match self.next_if(|i| matches!(i, Token::Identifier(_))) {
+		match self.next_if(|i| matches!(i, Token::Identifier(_) | Token::Const(_))) {
 			Some(Token::Identifier(name)) => Some(DirectValue::Ident(name)),
-			_ => match self.next_if(|i| matches!(i, Token::Const(_))) {
-				Some(Token::Const(symbol_idx)) => {
-					Some(DirectValue::Const(self.parse_const(symbol_idx)?))
-				}
-				_ => None,
-			},
+			Some(Token::Const(symbol_idx)) => Some(DirectValue::Const(
+				self.parse_const(self.symbol_table.get_const(symbol_idx)?)?,
+			)),
+			_ => None,
 		}
 	}
 	fn binary_operation(&mut self) -> Option<BinaryOperation> {
@@ -165,22 +163,18 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 			.next_if(|tk| BinaryOperation::from_token(&tk.token).is_some())
 			.map(|tk| BinaryOperation::from_token(&tk.token))?
 	}
-	/// TODO: Fix me!
-	fn parse_const(&self, symbol_idx: usize) -> Option<i32> {
-		let value = self
-			.symbol_table
-			.get_const(symbol_idx)?
-			.trim_start_matches('0');
-		if ('1'..='9').contains(&value.chars().nth(0)?) {
-			i32::from_str_radix(value, 10).ok()
+	fn parse_const(&self, value: &String) -> Option<i32> {
+		if let Ok(val) = i32::from_str_radix(value, 10) {
+			Some(val)
 		} else {
+			let value = value.trim_start_matches('0');
 			let radix = match value.chars().nth(0)? {
 				'b' => Some(2),
 				'o' => Some(8),
 				'x' => Some(16),
 				_ => None,
 			};
-			i32::from_str_radix(value, radix?).ok()
+			i32::from_str_radix(&value[1..], radix?).ok()
 		}
 	}
 }
