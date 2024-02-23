@@ -67,7 +67,7 @@ pub fn parse(lexer_output: LexerOutput) -> Result<Program, Option<Symbol>> {
 		statement_root.push(stmt);
 	}
 	let res = Ok(Program {
-		statement_root,
+		global_scope: Scope::new(statement_root),
 		return_value: parser
 			.return_value()
 			.ok_or_else(|| parser.symbols.peek().map(|i| *i))?,
@@ -87,7 +87,6 @@ struct Parser<I: Iterator<Item = Symbol>> {
 	symbol_table: SymbolTable,
 }
 impl<I: Iterator<Item = Symbol>> Parser<I> {
-	#[inline]
 	fn next_if_eq(&mut self, needle: Token) -> bool {
 		self.symbols.next_if(|&i| i.token == needle).is_some()
 	}
@@ -105,7 +104,8 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 			while let Some(stmt) = self.stmts() {
 				stmts.push(stmt);
 			}
-			Some(Stmts::If(expression, stmts)).take_if(|_| self.next_if_eq(Token::RightBrace))
+			Some(Stmts::If(expression, Scope::new(stmts)))
+				.take_if(|_| self.next_if_eq(Token::RightBrace))
 		} else if self.next_if_eq(Token::Keyword(Reserved::Int))
 			&& let Some(Token::Identifier(name)) =
 				self.next_if(|i| matches!(i, Token::Identifier(_)))
@@ -182,15 +182,25 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 #[allow(unused)]
 #[derive(Clone, Debug)]
 pub struct Program {
-	pub statement_root: Vec<Stmts>,
+	pub global_scope: Scope,
 	pub return_value: Expression,
+}
+
+#[derive(Clone, Debug)]
+pub struct Scope {
+	statements: Vec<Stmts>,
+}
+impl Scope {
+	pub fn new(statements: Vec<Stmts>) -> Self {
+		Self { statements }
+	}
 }
 
 type Ident = usize;
 
 #[derive(Clone, Debug)]
 pub enum Stmts {
-	If(Expression, Vec<Stmts>),
+	If(Expression, Scope),
 	Decl(Ident),
 	Assignment(Ident, Expression),
 }
