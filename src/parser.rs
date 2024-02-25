@@ -93,6 +93,19 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 	fn next_if(&mut self, func: impl Fn(Token) -> bool) -> Option<Token> {
 		self.symbols.next_if(|&i| func(i.token)).map(|i| i.token)
 	}
+	fn ident(&mut self) -> Option<Ident> {
+		match self.symbols.peek() {
+			Some(Symbol {
+				token: Token::Identifier(index),
+				line_number,
+			}) if let Some(name) = self.symbol_table.get_identifier(*index) => Some(Ident {
+				line_number: *line_number,
+				name: name.to_string(),
+			})
+			.take_if(|_| self.symbols.next().is_some()),
+			_ => None,
+		}
+	}
 	fn stmts(&mut self) -> Option<Stmts> {
 		if self.next_if_eq(Token::Keyword(Reserved::If)) && self.next_if_eq(Token::LeftParenthesis)
 		{
@@ -107,18 +120,16 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 			Some(Stmts::If(expression, Scope::new(stmts)))
 				.take_if(|_| self.next_if_eq(Token::RightBrace))
 		} else if self.next_if_eq(Token::Keyword(Reserved::Int))
-			&& let Some(Token::Identifier(name)) =
-				self.next_if(|i| matches!(i, Token::Identifier(_)))
+			&& let Some(ident) = self.ident()
 			&& self.next_if_eq(Token::Semicolon)
 		{
-			Some(Stmts::Decl(name))
-		} else if let Some(Token::Identifier(name)) =
-			self.next_if(|i| matches!(i, Token::Identifier(_)))
+			Some(Stmts::Decl(ident))
+		} else if let Some(ident) = self.ident()
 			&& self.next_if_eq(Token::Equal)
 			&& let Some(expression) = self.expression()
 			&& self.next_if_eq(Token::Semicolon)
 		{
-			Some(Stmts::Assignment(name, expression))
+			Some(Stmts::Assignment(ident, expression))
 		} else {
 			None
 		}
@@ -150,12 +161,15 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 		}
 	}
 	fn direct_value(&mut self) -> Option<DirectValue> {
-		match self.next_if(|i| matches!(i, Token::Identifier(_) | Token::Const(_))) {
-			Some(Token::Identifier(name)) => Some(DirectValue::Ident(name)),
-			Some(Token::Const(symbol_idx)) => Some(DirectValue::Const(
-				self.parse_const(self.symbol_table.get_const(symbol_idx)?)?,
-			)),
-			_ => None,
+		if let Some(val) = self.ident() {
+			Some(DirectValue::Ident(val))
+		} else {
+			match self.next_if(|i| matches!(i, Token::Const(_))) {
+				Some(Token::Const(symbol_idx)) => Some(DirectValue::Const(
+					self.parse_const(self.symbol_table.get_const(symbol_idx)?)?,
+				)),
+				_ => None,
+			}
 		}
 	}
 	fn binary_operation(&mut self) -> Option<BinaryOperation> {
@@ -196,7 +210,11 @@ impl Scope {
 	}
 }
 
-type Ident = usize;
+#[derive(Clone, Debug)]
+pub struct Ident {
+	line_number: usize,
+	name: String,
+}
 
 #[derive(Clone, Debug)]
 pub enum Stmts {

@@ -1,4 +1,4 @@
-#![feature(let_chains, option_take_if)]
+#![feature(let_chains, option_take_if, if_let_guard)]
 
 mod lexer;
 use lexer::tokenize;

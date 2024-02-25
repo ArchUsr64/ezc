@@ -77,6 +77,9 @@ impl SymbolTable {
 	pub fn get_const(&self, index: usize) -> Option<&String> {
 		self.consts.get(index)
 	}
+	pub fn get_identifier(&self, index: usize) -> Option<&String> {
+		self.identifier.get(index)
+	}
 	fn add_identifier(&mut self, identifier: String) -> usize {
 		self.identifier
 			.iter()
@@ -138,7 +141,7 @@ pub fn tokenize(input_stream: &str) -> LexerOutput {
 	} = LexerOutput::new();
 	let is_identifier_symbol = |char: char| char.is_alphanumeric() || char == '_';
 	let mut stream_iter = input_stream.chars().peekable();
-	let mut line_number = 0;
+	let mut line_number = 1;
 	while let Some(current) = stream_iter.next() {
 		if current == '\n' {
 			line_number += 1;
