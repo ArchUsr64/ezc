@@ -203,7 +203,7 @@ pub struct Program {
 
 #[derive(Clone, Debug)]
 pub struct Scope {
-	statements: Vec<Stmts>,
+	pub statements: Vec<Stmts>,
 }
 impl Scope {
 	pub fn new(statements: Vec<Stmts>) -> Self {
@@ -211,10 +211,15 @@ impl Scope {
 	}
 }
 
-#[derive(Clone, Debug)]
+/*
+   TODO: name here is cloned from the SymbolTable, it should instead just be an
+   index into `symbol_table.identifier` and the parser should move it to the
+   return value for `fn parse() -> (Program, Vec<String>)`
+*/
+#[derive(Clone, Debug, PartialEq)]
 pub struct Ident {
 	line_number: usize,
-	name: String,
+	pub name: String,
 }
 
 #[derive(Clone, Debug)]

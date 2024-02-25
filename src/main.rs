@@ -2,8 +2,12 @@
 
 mod lexer;
 use lexer::tokenize;
+
 mod parser;
 use parser::parse;
+
+mod analyzer;
+use analyzer::analyze;
 
 const TEST_PROGRAM: &'static str = r"
 int x;
@@ -22,7 +26,8 @@ return x;
 fn main() {
 	println!("Source Code:\n{TEST_PROGRAM}");
 	let lexer_output = tokenize(&TEST_PROGRAM);
-	let parsed = parse(lexer_output.clone());
 	println!("Tokens: {:#?}", lexer_output);
-	println!("Parse Tree: {:#?}", parsed.unwrap());
+	let parsed = parse(lexer_output.clone()).unwrap();
+	println!("Parse Tree: {:#?}", parsed);
+	println!("Analysis: {:?}", analyze(parsed));
 }
