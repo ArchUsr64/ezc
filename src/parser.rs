@@ -164,9 +164,10 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 		if let Some(val) = self.ident() {
 			Some(DirectValue::Ident(val))
 		} else {
+			let sign = if self.next_if_eq(Token::Minus) { -1 } else { 1 };
 			match self.next_if(|i| matches!(i, Token::Const(_))) {
 				Some(Token::Const(symbol_idx)) => Some(DirectValue::Const(
-					self.parse_const(self.symbol_table.get_const(symbol_idx)?)?,
+					sign * self.parse_const(self.symbol_table.get_const(symbol_idx)?)?,
 				)),
 				_ => None,
 			}
