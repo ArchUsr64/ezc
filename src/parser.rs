@@ -53,25 +53,30 @@ impl BinaryOperation {
 	}
 }
 
-pub fn parse(lexer_output: LexerOutput) -> Result<Program, Option<Symbol>> {
+pub fn parse(lexer_output: LexerOutput) -> Result<(Program, IdentNameTable), Option<Symbol>> {
 	let LexerOutput {
-		symbol_table,
+		symbol_table: SymbolTable {
+			identifier, consts, ..
+		},
 		symbol,
 	} = lexer_output;
 	let mut parser = Parser {
 		symbols: symbol.iter().map(|i| *i).peekable(),
-		symbol_table,
+		const_table: consts,
 	};
 	let mut statement_root = Vec::new();
 	while let Some(stmt) = parser.stmts() {
 		statement_root.push(stmt);
 	}
-	let res = Ok(Program {
-		global_scope: Scope::new(statement_root),
-		return_value: parser
-			.return_value()
-			.ok_or_else(|| parser.symbols.peek().map(|i| *i))?,
-	});
+	let res = Ok((
+		Program {
+			global_scope: Scope::new(statement_root),
+			return_value: parser
+				.return_value()
+				.ok_or_else(|| parser.symbols.peek().map(|i| *i))?,
+		},
+		IdentNameTable(identifier),
+	));
 	if let Some(Symbol {
 		token: Token::EOF, ..
 	}) = parser.symbols.peek()
@@ -84,7 +89,7 @@ pub fn parse(lexer_output: LexerOutput) -> Result<Program, Option<Symbol>> {
 
 struct Parser<I: Iterator<Item = Symbol>> {
 	symbols: Peekable<I>,
-	symbol_table: SymbolTable,
+	const_table: Vec<String>,
 }
 impl<I: Iterator<Item = Symbol>> Parser<I> {
 	fn next_if_eq(&mut self, needle: Token) -> bool {
@@ -98,9 +103,9 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 			Some(Symbol {
 				token: Token::Identifier(index),
 				line_number,
-			}) if let Some(name) = self.symbol_table.get_identifier(*index) => Some(Ident {
+			}) => Some(Ident {
 				line_number: *line_number,
-				name: name.to_string(),
+				table_index: *index,
 			})
 			.take_if(|_| self.symbols.next().is_some()),
 			_ => None,
@@ -167,7 +172,7 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 			let sign = if self.next_if_eq(Token::Minus) { -1 } else { 1 };
 			match self.next_if(|i| matches!(i, Token::Const(_))) {
 				Some(Token::Const(symbol_idx)) => Some(DirectValue::Const(
-					sign * self.parse_const(self.symbol_table.get_const(symbol_idx)?)?,
+					sign * self.parse_const(self.const_table.get(symbol_idx)?)?,
 				)),
 				_ => None,
 			}
@@ -202,6 +207,9 @@ pub struct Program {
 }
 
 #[derive(Clone, Debug)]
+pub struct IdentNameTable(Vec<String>);
+
+#[derive(Clone, Debug)]
 pub struct Scope {
 	pub statements: Vec<Stmts>,
 }
@@ -219,7 +227,7 @@ impl Scope {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ident {
 	line_number: usize,
-	pub name: String,
+	pub table_index: usize,
 }
 
 #[derive(Clone, Debug)]

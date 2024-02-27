@@ -69,9 +69,9 @@ pub struct Symbol {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SymbolTable {
-	identifier: Vec<String>,
-	consts: Vec<String>,
-	literal: Vec<String>,
+	pub identifier: Vec<String>,
+	pub consts: Vec<String>,
+	pub literal: Vec<String>,
 }
 impl SymbolTable {
 	pub fn get_const(&self, index: usize) -> Option<&String> {
