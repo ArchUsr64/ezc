@@ -24,6 +24,7 @@ pub fn analyze(program: &Program) -> Result<(), SemanticError> {
 	let Program {
 		global_scope,
 		return_value,
+		..
 	} = program;
 	let mut stack = ScopeStack::new();
 	stack.scope_analyze(global_scope)?;
@@ -32,7 +33,7 @@ pub fn analyze(program: &Program) -> Result<(), SemanticError> {
 		.map_err(|ident| SemanticError::new(SemanticErrorKind::UseBeforeDeclaration, ident))
 }
 
-type ScopeTable = Vec<String>;
+type ScopeTable = Vec<usize>;
 #[derive(Debug)]
 struct ScopeStack(Vec<ScopeTable>);
 
@@ -45,7 +46,7 @@ impl ScopeStack {
 			.0
 			.iter()
 			.flatten()
-			.find(|i| **i == ident.name)
+			.find(|i| **i == ident.table_index)
 			.is_some()
 		{
 			Ok(())
@@ -75,10 +76,10 @@ impl ScopeStack {
 			match stmt {
 				Stmts::Decl(ident) => {
 					let current_table = self.0.last_mut().unwrap();
-					if current_table.contains(&ident.name) {
+					if current_table.contains(&ident.table_index) {
 						return Err(SemanticError::new(MultipleDeclaration, ident.clone()));
 					}
-					current_table.push(ident.name.clone())
+					current_table.push(ident.table_index)
 				}
 				Stmts::Assignment(ident, expr) => {
 					if let Err(ident) = self

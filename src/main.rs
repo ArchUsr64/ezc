@@ -6,8 +6,8 @@ use lexer::tokenize;
 mod parser;
 use parser::parse;
 
-// mod analyzer;
-// use analyzer::analyze;
+mod analyzer;
+use analyzer::analyze;
 
 const TEST_PROGRAM: &'static str = r"
 int x;
@@ -28,7 +28,8 @@ fn main() {
 	// let lexer_output = tokenize(&TEST_PROGRAM);
 	let lexer_output = tokenize(&include_str!("test.c"));
 	println!("Tokens: {:#?}", lexer_output);
-	let parsed = parse(lexer_output.clone()).unwrap();
+	let (parsed, ident_table) = parse(lexer_output.clone()).unwrap();
 	println!("Parse Tree: {:#?}", parsed);
-	// println!("Analysis: {:?}", analyze(&parsed));
+	println!("Ident Table: {:#?}", ident_table);
+	println!("Analysis: {:?}", analyze(&parsed));
 }
