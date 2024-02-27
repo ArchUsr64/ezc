@@ -20,7 +20,7 @@ pub enum SemanticErrorKind {
 	MultipleDeclaration,
 }
 
-pub fn analyze(program: Program) -> Result<(), SemanticError> {
+pub fn analyze(program: &Program) -> Result<(), SemanticError> {
 	let Program {
 		global_scope,
 		return_value,
@@ -54,8 +54,8 @@ impl ScopeStack {
 			Err(ident.clone())
 		}
 	}
-	fn expression_valid(&self, expr: Expression) -> Result<(), Ident> {
-		let find_direct_value = |direct_value| -> Result<(), Ident> {
+	fn expression_valid(&self, expr: &Expression) -> Result<(), Ident> {
+		let find_direct_value = |direct_value: &DirectValue| -> Result<(), Ident> {
 			match direct_value {
 				DirectValue::Ident(i) => self.find_ident(&i),
 				DirectValue::Const(_) => Ok(()),
@@ -68,30 +68,30 @@ impl ScopeStack {
 			}
 		}
 	}
-	fn scope_analyze(&mut self, scope: Scope) -> Result<(), SemanticError> {
+	fn scope_analyze(&mut self, scope: &Scope) -> Result<(), SemanticError> {
 		self.0.push(ScopeTable::new());
-		for stmt in scope.statements {
+		for stmt in scope.statements.iter() {
 			use SemanticErrorKind::*;
 			match stmt {
 				Stmts::Decl(ident) => {
 					let current_table = self.0.last_mut().unwrap();
 					if current_table.contains(&ident.name) {
-						return Err(SemanticError::new(MultipleDeclaration, ident));
+						return Err(SemanticError::new(MultipleDeclaration, ident.clone()));
 					}
-					current_table.push(ident.name)
+					current_table.push(ident.name.clone())
 				}
 				Stmts::Assignment(ident, expr) => {
 					if let Err(ident) = self
 						.find_ident(&ident)
-						.and_then(|_| self.expression_valid(expr))
+						.and_then(|_| self.expression_valid(&expr))
 					{
 						return Err(SemanticError::new(UseBeforeDeclaration, ident));
 					}
 				}
 				Stmts::If(expr, scope) => {
-					self.expression_valid(expr)
+					self.expression_valid(&expr)
 						.map_err(|ident| SemanticError::new(UseBeforeDeclaration, ident))?;
-					self.scope_analyze(scope)?
+					self.scope_analyze(&scope)?
 				}
 			}
 		}

@@ -29,5 +29,5 @@ fn main() {
 	println!("Tokens: {:#?}", lexer_output);
 	let parsed = parse(lexer_output.clone()).unwrap();
 	println!("Parse Tree: {:#?}", parsed);
-	println!("Analysis: {:?}", analyze(parsed));
+	println!("Analysis: {:?}", analyze(&parsed));
 }
