@@ -1,7 +1,7 @@
 //! Three Address Code Generation
 use crate::parser::{self, Program};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct BindedIdent {
 	name_index: usize,
 	scope_id: usize,
@@ -20,12 +20,11 @@ pub enum RValue {
 	Operation(Operand, parser::BinaryOperation, Operand),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct AddressOffset(isize);
+type AddressOffset = usize;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Instruction {
-	IFZ(Operand, AddressOffset),
+	Ifz(Operand, AddressOffset),
 	Expression(Operand, RValue),
 	Return(Operand),
 }
@@ -105,10 +104,7 @@ impl TACGen {
 							Operand::Temporary(self.temp_count),
 							self.generate_rvalue(expr),
 						),
-						Instruction::IFZ(
-							Operand::Temporary(self.temp_count),
-							AddressOffset(sub_scope.len() as isize),
-						),
+						Instruction::Ifz(Operand::Temporary(self.temp_count), sub_scope.len()),
 					];
 					if_block.append(&mut sub_scope);
 					if_block
