@@ -89,7 +89,7 @@ impl ScopeStack {
 						return Err(SemanticError::new(UseBeforeDeclaration, ident));
 					}
 				}
-				Stmts::If(expr, scope) => {
+				Stmts::If(expr, scope) | Stmts::While(expr, scope) => {
 					self.expression_valid(&expr)
 						.map_err(|ident| SemanticError::new(UseBeforeDeclaration, ident))?;
 					self.scope_analyze(&scope)?

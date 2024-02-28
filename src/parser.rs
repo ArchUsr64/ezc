@@ -2,6 +2,7 @@
 /*
 	<Program>			-> <Stmts> return <Expression>;
 	<Stmts>				-> if (<Expression>) {<Stmts>}
+						|  while (<Expression>) {<Stmts>};
 						|  int Ident;
 						|  Ident = <Expression>;
 	<Expression>		-> <DirectValue>
@@ -124,6 +125,19 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 			}
 			Some(Stmts::If(expression, Scope::new(stmts)))
 				.take_if(|_| self.next_if_eq(Token::RightBrace))
+		} else if self.next_if_eq(Token::Keyword(Reserved::While))
+			&& self.next_if_eq(Token::LeftParenthesis)
+		{
+			let expression = self.expression()?;
+			if !(self.next_if_eq(Token::RightParenthesis) && self.next_if_eq(Token::LeftBrace)) {
+				return None;
+			};
+			let mut stmts = Vec::new();
+			while let Some(stmt) = self.stmts() {
+				stmts.push(stmt);
+			}
+			Some(Stmts::While(expression, Scope::new(stmts)))
+				.take_if(|_| self.next_if_eq(Token::RightBrace))
 		} else if self.next_if_eq(Token::Keyword(Reserved::Int))
 			&& let Some(ident) = self.ident()
 			&& self.next_if_eq(Token::Semicolon)
@@ -233,6 +247,7 @@ pub struct Ident {
 #[derive(Clone, Debug)]
 pub enum Stmts {
 	If(Expression, Scope),
+	While(Expression, Scope),
 	Decl(Ident),
 	Assignment(Ident, Expression),
 }

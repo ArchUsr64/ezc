@@ -27,6 +27,7 @@ pub enum Instruction {
 	Ifz(Operand, AddressOffset),
 	Expression(Operand, RValue),
 	Return(Operand),
+	Goto(isize),
 }
 
 /// Assumes the program is semantically sound, should only be ran after
@@ -60,7 +61,6 @@ impl TACGen {
 		}
 	}
 	fn generate_ident(&self, ident: &parser::Ident) -> BindedIdent {
-		println!("{:?}, {ident:?}", self.scope_map);
 		let name_index = ident.table_index;
 		BindedIdent {
 			name_index,
@@ -96,6 +96,21 @@ impl TACGen {
 					Operand::Ident(self.generate_ident(ident)),
 					self.generate_rvalue(expr),
 				)],
+				Stmts::While(expr, scope) => {
+					self.scope_id += 1;
+					let mut sub_scope = self.scope_gen(scope);
+					let mut while_block = vec![
+						Instruction::Expression(
+							Operand::Temporary(self.temp_count),
+							self.generate_rvalue(expr),
+						),
+						Instruction::Ifz(Operand::Temporary(self.temp_count), sub_scope.len() + 1),
+					];
+					let scope_len = sub_scope.len();
+					while_block.append(&mut sub_scope);
+					while_block.push(Instruction::Goto(-(scope_len as isize) - 3));
+					while_block
+				}
 				Stmts::If(expr, scope) => {
 					self.scope_id += 1;
 					let mut sub_scope = self.scope_gen(scope);

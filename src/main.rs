@@ -15,16 +15,19 @@ mod x86_gen;
 
 const TEST_PROGRAM: &'static str = r"
 int x;
-x = 10;
-if (x == 10) {
-	x = x + 5;
-	int y;
-	y = 10;
-	if (y < 20) {
-		y = x + y;
-	}
+int y;
+int i;
+int t;
+x = 0;
+y = 1;
+i = 1;
+while (i < 10) {
+	t = y;
+	y = x + t;
+	x = t;
+	i = i + 1;
 }
-return x;
+return y;
 ";
 
 fn main() {

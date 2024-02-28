@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
 	parser::BinaryOperation,
@@ -29,23 +29,34 @@ const EPILOGUE: &'static str = r"
 pub fn x86_gen(tac_instruction: Vec<tac_gen::Instruction>) -> String {
 	let mut res = PRELUDE.to_string();
 	let mut label_count = 0;
+	let mut goto_count = 0;
 	// Map from the instruction index to the label count
-	let mut label_map: HashMap<usize, usize> = HashMap::new();
+	let mut if_label_map: HashMap<usize, usize> = HashMap::new();
+	let mut goto_label_map: HashMap<isize, usize> = HashMap::new();
 	res.push_str(PROLOGUE);
 	let mut allocator = StackAllocator::new();
+	use tac_gen::Instruction;
 	for (i, instruction) in tac_instruction.iter().enumerate() {
-		use tac_gen::Instruction;
+		match instruction {
+			Instruction::Goto(offset) => {
+				goto_count += 1;
+				goto_label_map.insert(i as isize + *offset, goto_count);
+			}
+			_ => continue,
+		}
+	}
+	for (i, instruction) in tac_instruction.iter().enumerate() {
 		let mut instructions = match instruction {
 			Instruction::Return(op) => {
 				vec![format!("mov %eax, {}", allocator.parse_operand(*op))]
 			}
 			Instruction::Expression(op, r_value) => allocator.expression_gen(*op, *r_value),
 			Instruction::Ifz(op, offset) => {
-				let label_id = if let Some(label_index) = label_map.get(&(i + *offset)) {
+				let label_id = if let Some(label_index) = if_label_map.get(&(i + *offset)) {
 					*label_index
 				} else {
 					label_count += 1;
-					label_map.insert(i + *offset, label_count);
+					if_label_map.insert(i + *offset, label_count);
 					label_count
 				};
 				vec![
@@ -53,8 +64,14 @@ pub fn x86_gen(tac_instruction: Vec<tac_gen::Instruction>) -> String {
 					format!("je L{label_id}"),
 				]
 			}
+			Instruction::Goto(offset) => {
+				vec![format!("jmp G{}", goto_label_map[&(*offset + i as isize)])]
+			}
 		};
-		if let Some(label_index) = label_map.get(&i) {
+		if let Some(label_index) = goto_label_map.get(&(i as isize)) {
+			instructions.push(format!("G{label_index}:"));
+		}
+		if let Some(label_index) = if_label_map.get(&i) {
 			instructions.push(format!("L{label_index}:"));
 		}
 		instructions.iter_mut().for_each(|i| {
