@@ -15,7 +15,7 @@ use std::iter::Peekable;
 
 use crate::lexer::{LexerOutput, Reserved, Symbol, SymbolTable, Token};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BinaryOperation {
 	Add,
 	Sub,
@@ -207,7 +207,7 @@ pub struct Program {
 }
 
 #[derive(Clone, Debug)]
-pub struct IdentNameTable(Vec<String>);
+pub struct IdentNameTable(pub Vec<String>);
 
 #[derive(Clone, Debug)]
 pub struct Scope {

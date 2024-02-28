@@ -9,6 +9,8 @@ use parser::parse;
 mod analyzer;
 use analyzer::analyze;
 
+mod tac_gen;
+
 const TEST_PROGRAM: &'static str = r"
 int x;
 x = 10;
@@ -25,11 +27,15 @@ return x;
 
 fn main() {
 	println!("Source Code:\n{TEST_PROGRAM}");
-	// let lexer_output = tokenize(&TEST_PROGRAM);
-	let lexer_output = tokenize(&include_str!("test.c"));
+	let lexer_output = tokenize(&TEST_PROGRAM);
+	// let lexer_output = tokenize(&include_str!("test.c"));
 	println!("Tokens: {:#?}", lexer_output);
 	let (parsed, ident_table) = parse(lexer_output.clone()).unwrap();
 	println!("Parse Tree: {:#?}", parsed);
 	println!("Ident Table: {:#?}", ident_table);
 	println!("Analysis: {:?}", analyze(&parsed));
+	println!(
+		"Code Gen: {:#?}",
+		tac_gen::generate(&parsed, ident_table.0.len())
+	);
 }
