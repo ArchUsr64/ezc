@@ -2,8 +2,8 @@ use crate::parser::{DirectValue, Expression, Ident, Program, Scope, Stmts};
 
 #[derive(Debug)]
 pub struct SemanticError {
-	kind: SemanticErrorKind,
-	identifier: Ident,
+	pub kind: SemanticErrorKind,
+	pub identifier: Ident,
 }
 impl SemanticError {
 	fn new(kind: SemanticErrorKind, ident: Ident) -> Self {

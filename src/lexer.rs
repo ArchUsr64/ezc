@@ -74,12 +74,6 @@ pub struct SymbolTable {
 	pub literal: Vec<String>,
 }
 impl SymbolTable {
-	pub fn get_const(&self, index: usize) -> Option<&String> {
-		self.consts.get(index)
-	}
-	pub fn get_identifier(&self, index: usize) -> Option<&String> {
-		self.identifier.get(index)
-	}
 	fn add_identifier(&mut self, identifier: String) -> usize {
 		self.identifier
 			.iter()
