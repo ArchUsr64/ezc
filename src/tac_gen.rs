@@ -34,15 +34,7 @@ pub enum Instruction {
 /// `analyzer::analyze` returns `Ok(())`
 pub fn generate(program: &Program, ident_count: usize) -> Vec<Instruction> {
 	let mut generator = TACGen::new(ident_count);
-	let mut instructions = generator.scope_gen(&program.global_scope);
-	instructions.push(Instruction::Expression(
-		Operand::Temporary(generator.temp_count),
-		generator.generate_rvalue(&program.return_value),
-	));
-	instructions.push(Instruction::Return(Operand::Temporary(
-		generator.temp_count,
-	)));
-	instructions
+	generator.scope_gen(&program.global_scope)
 }
 
 struct TACGen {
@@ -110,6 +102,15 @@ impl TACGen {
 					while_block.append(&mut sub_scope);
 					while_block.push(Instruction::Goto(-(scope_len as isize) - 3));
 					while_block
+				}
+				Stmts::Return(expr) => {
+					vec![
+						Instruction::Expression(
+							Operand::Temporary(self.temp_count),
+							self.generate_rvalue(expr),
+						),
+						Instruction::Return(Operand::Temporary(self.temp_count)),
+					]
 				}
 				Stmts::If(expr, scope) => {
 					self.scope_id += 1;

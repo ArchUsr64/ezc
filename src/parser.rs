@@ -1,10 +1,11 @@
 //! Grammar:
 /*
-	<Program>			-> <Stmts> return <Expression>;
+	<Program>			-> (<Stmts>;)*
 	<Stmts>				-> if (<Expression>) {<Stmts>}
 						|  while (<Expression>) {<Stmts>};
 						|  int Ident;
 						|  Ident = <Expression>;
+						|  return Expression;
 	<Expression>		-> <DirectValue>
 						|  <DirectValue> <BinaryOperation> <DirectValue>
 	<BinaryOperation>	-> +, -, *, /, &, |, ^, <, <=, >, >=, ==, !=
@@ -72,15 +73,21 @@ pub fn parse(lexer_output: LexerOutput) -> Result<(Program, IdentNameTable), Opt
 	let res = Ok((
 		Program {
 			global_scope: Scope::new(statement_root),
-			return_value: parser
-				.return_value()
-				.ok_or_else(|| parser.symbols.peek().map(|i| *i))?,
 		},
 		IdentNameTable(identifier),
 	));
-	if let Some(Symbol {
-		token: Token::EOF, ..
-	}) = parser.symbols.peek()
+	if parser
+		.symbols
+		.next_if(|i| {
+			matches!(
+				i,
+				Symbol {
+					token: Token::EOF,
+					..
+				}
+			)
+		})
+		.is_some()
 	{
 		res
 	} else {
@@ -150,7 +157,7 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 		{
 			Some(Stmts::Assignment(ident, expression))
 		} else {
-			None
+			Some(Stmts::Return(self.return_value()?))
 		}
 	}
 	fn return_value(&mut self) -> Option<Expression> {
@@ -217,7 +224,6 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 #[derive(Clone, Debug)]
 pub struct Program {
 	pub global_scope: Scope,
-	pub return_value: Expression,
 }
 
 #[derive(Clone, Debug)]
@@ -250,6 +256,7 @@ pub enum Stmts {
 	While(Expression, Scope),
 	Decl(Ident),
 	Assignment(Ident, Expression),
+	Return(Expression),
 }
 
 #[derive(Clone, Debug)]

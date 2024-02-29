@@ -21,16 +21,9 @@ pub enum SemanticErrorKind {
 }
 
 pub fn analyze(program: &Program) -> Result<(), SemanticError> {
-	let Program {
-		global_scope,
-		return_value,
-		..
-	} = program;
+	let Program { global_scope, .. } = program;
 	let mut stack = ScopeStack::new();
-	stack.scope_analyze(global_scope)?;
-	stack
-		.expression_valid(return_value)
-		.map_err(|ident| SemanticError::new(SemanticErrorKind::UseBeforeDeclaration, ident))
+	stack.scope_analyze(global_scope)
 }
 
 type ScopeTable = Vec<usize>;
@@ -93,6 +86,11 @@ impl ScopeStack {
 					self.expression_valid(&expr)
 						.map_err(|ident| SemanticError::new(UseBeforeDeclaration, ident))?;
 					self.scope_analyze(&scope)?
+				}
+				Stmts::Return(expr) => {
+					if let Err(ident) = self.expression_valid(&expr) {
+						return Err(SemanticError::new(UseBeforeDeclaration, ident));
+					}
 				}
 			}
 		}

@@ -22,6 +22,7 @@ const PROLOGUE: &'static str = r"
 ";
 
 const EPILOGUE: &'static str = r"
+	END:
 	pop %rbp
 	ret
 ";
@@ -48,7 +49,10 @@ pub fn x86_gen(tac_instruction: Vec<tac_gen::Instruction>) -> String {
 	for (i, instruction) in tac_instruction.iter().enumerate() {
 		let mut instructions = match instruction {
 			Instruction::Return(op) => {
-				vec![format!("mov %eax, {}", allocator.parse_operand(*op))]
+				vec![
+					format!("mov %eax, {}", allocator.parse_operand(*op)),
+					format!("jmp END"),
+				]
 			}
 			Instruction::Expression(op, r_value) => allocator.expression_gen(*op, *r_value),
 			Instruction::Ifz(op, offset) => {
