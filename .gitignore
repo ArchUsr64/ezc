@@ -1,4 +1,5 @@
 /target
 out.asm
-a.out
+*.out
 *.o
+temp*
