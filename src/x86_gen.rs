@@ -1,3 +1,4 @@
+//! x86 backend
 use std::collections::HashMap;
 
 use crate::{
@@ -5,23 +6,22 @@ use crate::{
 	tac_gen::{self, BindedIdent, Operand, RValue},
 };
 
-const PRELUDE: &'static str = r"
+const PRELUDE: &str = r"
 .intel_mnemonic
 .intel_syntax
 .text
-
-.globl test_func
+.global test_func
 .type test_func, @function
 
 test_func:
 ";
 
-const PROLOGUE: &'static str = r"
+const PROLOGUE: &str = r"
 	push %rbp
 	mov %rbp, %rsp
 ";
 
-const EPILOGUE: &'static str = r"
+const EPILOGUE: &str = r"
 	END:
 	pop %rbp
 	ret
@@ -48,12 +48,10 @@ pub fn x86_gen(tac_instruction: Vec<tac_gen::Instruction>) -> String {
 	}
 	for (i, instruction) in tac_instruction.iter().enumerate() {
 		let mut instructions = match instruction {
-			Instruction::Return(op) => {
-				vec![
-					format!("mov %eax, {}", allocator.parse_operand(*op)),
-					format!("jmp END"),
-				]
-			}
+			Instruction::Return(op) => vec![
+				format!("mov %eax, {}", allocator.parse_operand(*op)),
+				format!("jmp END"),
+			],
 			Instruction::Expression(op, r_value) => allocator.expression_gen(*op, *r_value),
 			Instruction::Ifz(op, offset) => {
 				let label_id = if let Some(label_index) = if_label_map.get(&(i + *offset)) {
@@ -80,7 +78,7 @@ pub fn x86_gen(tac_instruction: Vec<tac_gen::Instruction>) -> String {
 		}
 		instructions.iter_mut().for_each(|i| {
 			res += format!("	{i}\n").as_str();
-			i.insert_str(0, "	");
+			i.insert(0, '\t');
 			i.push('\n')
 		});
 	}
@@ -94,7 +92,6 @@ struct StackAllocator {
 	ident_table: HashMap<BindedIdent, usize>,
 	temporary_var_table: HashMap<usize, usize>,
 }
-
 impl StackAllocator {
 	fn new() -> Self {
 		Self {
@@ -129,12 +126,10 @@ impl StackAllocator {
 			RValue::Assignment(Operand::Immediate(val)) => {
 				vec![format!("mov {}, {}", self.parse_operand(l_value), val)]
 			}
-			RValue::Assignment(r_value) => {
-				vec![
-					format!("mov %eax, {}", self.parse_operand(r_value)),
-					format!("mov {}, %eax", self.parse_operand(l_value)),
-				]
-			}
+			RValue::Assignment(r_value) => vec![
+				format!("mov %eax, {}", self.parse_operand(r_value)),
+				format!("mov {}, %eax", self.parse_operand(l_value)),
+			],
 			RValue::Operation(lhs, operation, rhs) => {
 				enum Operation {
 					Arithmetic(&'static str),

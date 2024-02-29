@@ -34,7 +34,7 @@ pub enum Instruction {
 /// `analyzer::analyze` returns `Ok(())`
 pub fn generate(program: &Program, ident_count: usize) -> Vec<Instruction> {
 	let mut generator = TACGen::new(ident_count);
-	generator.scope_gen(&program.global_scope)
+	generator.scope_gen(&program.0)
 }
 
 struct TACGen {
@@ -76,8 +76,7 @@ impl TACGen {
 	}
 	fn scope_gen(&mut self, scope: &parser::Scope) -> Vec<Instruction> {
 		let mut instructions = Vec::new();
-		let current_scope = self.scope_id;
-		for stmt in scope.statements.iter() {
+		for stmt in scope.0.iter() {
 			use parser::{Ident, Stmts};
 			let mut generated_instructions = match stmt {
 				Stmts::Decl(Ident { table_index, .. }) => {
@@ -127,17 +126,6 @@ impl TACGen {
 				}
 			};
 			instructions.append(&mut generated_instructions);
-		}
-		// Remove the current scope entires from the scope_map once the scope ends
-		// TODO: This global scope check shouldn't be required once return statatments
-		// are just regular `Stmts`
-		if current_scope != 0 {
-			self.scope_map
-				.iter_mut()
-				.filter(|i| i.last() == Some(&current_scope))
-				.for_each(|i| {
-					i.pop();
-				});
 		}
 		self.scope_id += 1;
 		instructions

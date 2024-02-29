@@ -1,18 +1,12 @@
+//! Semantic Analyzer
+//!
+//! Takes a reference to `parser::Program` and returns any errors if present
+//! Should be ran before going for code gen, since the later stages expect the
+//! program to be semantically sound.
 use crate::parser::{DirectValue, Expression, Ident, Program, Scope, Stmts};
 
 #[derive(Debug)]
-pub struct SemanticError {
-	pub kind: SemanticErrorKind,
-	pub identifier: Ident,
-}
-impl SemanticError {
-	fn new(kind: SemanticErrorKind, ident: Ident) -> Self {
-		Self {
-			kind,
-			identifier: ident,
-		}
-	}
-}
+pub struct SemanticError(pub SemanticErrorKind, pub Ident);
 
 #[derive(Debug)]
 pub enum SemanticErrorKind {
@@ -21,8 +15,8 @@ pub enum SemanticErrorKind {
 }
 
 pub fn analyze(program: &Program) -> Result<(), SemanticError> {
-	let Program { global_scope, .. } = program;
-	let mut stack = ScopeStack::new();
+	let Program(global_scope) = program;
+	let mut stack = ScopeStack(Vec::new());
 	stack.scope_analyze(global_scope)
 }
 
@@ -31,27 +25,17 @@ type ScopeTable = Vec<usize>;
 struct ScopeStack(Vec<ScopeTable>);
 
 impl ScopeStack {
-	fn new() -> Self {
-		Self(Vec::new())
-	}
 	fn find_ident(&self, ident: &Ident) -> Result<(), Ident> {
-		if self
-			.0
-			.iter()
-			.flatten()
-			.find(|i| **i == ident.table_index)
-			.is_some()
-		{
+		if self.0.iter().flatten().any(|i| *i == ident.table_index) {
 			Ok(())
 		} else {
-			// TODO: Make ident implement Copy to remove this clone
-			Err(ident.clone())
+			Err(*ident)
 		}
 	}
 	fn expression_valid(&self, expr: &Expression) -> Result<(), Ident> {
 		let find_direct_value = |direct_value: &DirectValue| -> Result<(), Ident> {
 			match direct_value {
-				DirectValue::Ident(i) => self.find_ident(&i),
+				DirectValue::Ident(i) => self.find_ident(i),
 				DirectValue::Const(_) => Ok(()),
 			}
 		};
@@ -64,32 +48,32 @@ impl ScopeStack {
 	}
 	fn scope_analyze(&mut self, scope: &Scope) -> Result<(), SemanticError> {
 		self.0.push(ScopeTable::new());
-		for stmt in scope.statements.iter() {
+		for stmt in scope.0.iter() {
 			use SemanticErrorKind::*;
 			match stmt {
 				Stmts::Decl(ident) => {
 					let current_table = self.0.last_mut().unwrap();
 					if current_table.contains(&ident.table_index) {
-						return Err(SemanticError::new(MultipleDeclaration, ident.clone()));
+						return Err(SemanticError(MultipleDeclaration, *ident));
 					}
 					current_table.push(ident.table_index)
 				}
 				Stmts::Assignment(ident, expr) => {
 					if let Err(ident) = self
-						.find_ident(&ident)
-						.and_then(|_| self.expression_valid(&expr))
+						.find_ident(ident)
+						.and_then(|_| self.expression_valid(expr))
 					{
-						return Err(SemanticError::new(UseBeforeDeclaration, ident));
+						return Err(SemanticError(UseBeforeDeclaration, ident));
 					}
 				}
 				Stmts::If(expr, scope) | Stmts::While(expr, scope) => {
-					self.expression_valid(&expr)
-						.map_err(|ident| SemanticError::new(UseBeforeDeclaration, ident))?;
-					self.scope_analyze(&scope)?
+					self.expression_valid(expr)
+						.map_err(|ident| SemanticError(UseBeforeDeclaration, ident))?;
+					self.scope_analyze(scope)?
 				}
 				Stmts::Return(expr) => {
-					if let Err(ident) = self.expression_valid(&expr) {
-						return Err(SemanticError::new(UseBeforeDeclaration, ident));
+					if let Err(ident) = self.expression_valid(expr) {
+						return Err(SemanticError(UseBeforeDeclaration, ident));
 					}
 				}
 			}

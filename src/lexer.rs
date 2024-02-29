@@ -1,3 +1,7 @@
+//! Lexical Analyzer
+//!
+//! Call the `lexer::tokenize` function with the input source code as `&str`
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Token {
 	Keyword(Reserved),
@@ -58,7 +62,7 @@ pub enum Token {
 	Colon,
 	Comma,
 
-	EOF,
+	Eof,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -309,7 +313,7 @@ pub fn tokenize(input_stream: &str) -> LexerOutput {
 		});
 	}
 	symbol.push(Symbol {
-		token: Token::EOF,
+		token: Token::Eof,
 		line_number,
 	});
 	LexerOutput {
