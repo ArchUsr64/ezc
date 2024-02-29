@@ -8,7 +8,7 @@
 						|  return Expression;
 	<Expression>		-> <DirectValue>
 						|  <DirectValue> <BinaryOperation> <DirectValue>
-	<BinaryOperation>	-> +, -, *, /, &, |, ^, <, <=, >, >=, ==, !=
+	<BinaryOperation>	-> +, -, *, /, %, &, |, ^, <, <=, >, >=, ==, !=
 	<DirectValue>		-> Ident
 						|  Const
 */
@@ -23,6 +23,7 @@ pub enum BinaryOperation {
 	Sub,
 	Mul,
 	Div,
+	Mod,
 	And,
 	Or,
 	Xor,
@@ -41,6 +42,7 @@ impl BinaryOperation {
 			Minus => Some(Self::Sub),
 			Star => Some(Self::Mul),
 			Slash => Some(Self::Div),
+			Percent => Some(Self::Mod),
 			Amp => Some(Self::And),
 			Pipe => Some(Self::Or),
 			Caret => Some(Self::Xor),

@@ -142,6 +142,7 @@ impl StackAllocator {
 					// These require special code gen
 					Mul,
 					Div,
+					Mod,
 				}
 				let operation = match operation {
 					BinaryOperation::Add => Operation::Arithmetic("add"),
@@ -157,6 +158,7 @@ impl StackAllocator {
 					BinaryOperation::NotEqual => Operation::Conditional("setne"),
 					BinaryOperation::Mul => Operation::Mul,
 					BinaryOperation::Div => Operation::Div,
+					BinaryOperation::Mod => Operation::Mod,
 				};
 				match operation {
 					Operation::Arithmetic(op_code) => vec![
@@ -184,6 +186,13 @@ impl StackAllocator {
 						format!("cdq"),
 						format!("idiv %ecx"),
 						format!("mov {}, %eax", self.parse_operand(l_value)),
+					],
+					Operation::Mod => vec![
+						format!("mov %eax, {}", self.parse_operand(lhs),),
+						format!("mov %ecx, {}", self.parse_operand(rhs),),
+						format!("cdq"),
+						format!("idiv %ecx"),
+						format!("mov {}, %edx", self.parse_operand(l_value)),
 					],
 				}
 			}
