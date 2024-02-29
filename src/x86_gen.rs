@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
 	parser::BinaryOperation,
@@ -120,53 +120,67 @@ impl StackAllocator {
 			Operand::Immediate(val) => val.to_string(),
 		}
 	}
-	fn expression_gen(&mut self, op: Operand, r_value: RValue) -> Vec<String> {
+	fn expression_gen(&mut self, l_value: Operand, r_value: RValue) -> Vec<String> {
 		match r_value {
 			RValue::Assignment(Operand::Immediate(val)) => {
-				vec![format!("mov {}, {}", self.parse_operand(op), val)]
+				vec![format!("mov {}, {}", self.parse_operand(l_value), val)]
 			}
 			RValue::Assignment(r_value) => {
 				vec![
 					format!("mov %eax, {}", self.parse_operand(r_value)),
-					format!("mov {}, %eax", self.parse_operand(op)),
+					format!("mov {}, %eax", self.parse_operand(l_value)),
 				]
 			}
 			RValue::Operation(lhs, operation, rhs) => {
 				enum Operation {
-					Arithmetic,
-					Conditional,
+					Arithmetic(&'static str),
+					Conditional(&'static str),
+					// These require special code gen
+					Mul,
+					Div,
 				}
-				let (operation, op_code) = match operation {
-					BinaryOperation::Add => (Operation::Arithmetic, "add"),
-					BinaryOperation::Sub => (Operation::Arithmetic, "sub"),
-					BinaryOperation::Mul => (Operation::Arithmetic, "mul"),
-					BinaryOperation::Div => (Operation::Arithmetic, "div"),
-					BinaryOperation::And => (Operation::Arithmetic, "and"),
-					BinaryOperation::Or => (Operation::Arithmetic, "or"),
-					BinaryOperation::Xor => (Operation::Arithmetic, "xor"),
-					BinaryOperation::Less => (Operation::Conditional, "setl"),
-					BinaryOperation::LessEqual => (Operation::Conditional, "setle"),
-					BinaryOperation::Greater => (Operation::Conditional, "setg"),
-					BinaryOperation::GreaterEqual => (Operation::Conditional, "setge"),
-					BinaryOperation::Equal => (Operation::Conditional, "sete"),
-					BinaryOperation::NotEqual => (Operation::Conditional, "setne"),
+				let operation = match operation {
+					BinaryOperation::Add => Operation::Arithmetic("add"),
+					BinaryOperation::Sub => Operation::Arithmetic("sub"),
+					BinaryOperation::And => Operation::Arithmetic("and"),
+					BinaryOperation::Or => Operation::Arithmetic("or"),
+					BinaryOperation::Xor => Operation::Arithmetic("xor"),
+					BinaryOperation::Less => Operation::Conditional("setl"),
+					BinaryOperation::LessEqual => Operation::Conditional("setle"),
+					BinaryOperation::Greater => Operation::Conditional("setg"),
+					BinaryOperation::GreaterEqual => Operation::Conditional("setge"),
+					BinaryOperation::Equal => Operation::Conditional("sete"),
+					BinaryOperation::NotEqual => Operation::Conditional("setne"),
+					BinaryOperation::Mul => Operation::Mul,
+					BinaryOperation::Div => Operation::Div,
 				};
 				match operation {
-					Operation::Arithmetic => vec![
+					Operation::Arithmetic(op_code) => vec![
 						format!("mov %eax, {}", self.parse_operand(lhs)),
 						format!("{} %eax, {}", op_code, self.parse_operand(rhs)),
-						format!("mov {}, %eax", self.parse_operand(op)),
+						format!("mov {}, %eax", self.parse_operand(l_value)),
 					],
-					Operation::Conditional => {
-						vec![
-							format!("mov %eax, {}", self.parse_operand(lhs)),
-							format!("cmp %eax, {}", self.parse_operand(rhs)),
-							format!("{op_code} %al"),
-							format!("and %al, 1"),
-							format!("movzx %eax, %al"),
-							format!("mov {}, %eax", self.parse_operand(op)),
-						]
-					}
+					Operation::Conditional(op_code) => vec![
+						format!("mov %eax, {}", self.parse_operand(lhs)),
+						format!("cmp %eax, {}", self.parse_operand(rhs)),
+						format!("{op_code} %al"),
+						format!("and %al, 1"),
+						format!("movzx %eax, %al"),
+						format!("mov {}, %eax", self.parse_operand(l_value)),
+					],
+					Operation::Mul => vec![
+						format!("mov %eax, {}", self.parse_operand(lhs),),
+						format!("mov %ecx, {}", self.parse_operand(rhs),),
+						format!("imul %eax, %ecx"),
+						format!("mov {}, %eax", self.parse_operand(l_value)),
+					],
+					Operation::Div => vec![
+						format!("mov %eax, {}", self.parse_operand(lhs),),
+						format!("mov %ecx, {}", self.parse_operand(rhs),),
+						format!("cdq"),
+						format!("idiv %ecx"),
+						format!("mov {}, %eax", self.parse_operand(l_value)),
+					],
 				}
 			}
 		}
