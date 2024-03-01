@@ -8,6 +8,8 @@
 //! | while (<Expression>) {<Stmts>*}
 //! | int Ident;
 //! | Ident = <Expression>;
+//! | break;
+//! | continue;
 //! | return <Expression>;
 //!
 //! <Expression>
@@ -48,6 +50,8 @@ pub enum Stmts {
 	While(Expression, Scope),
 	Decl(Ident),
 	Assignment(Ident, Expression),
+	Break,
+	Continue,
 	Return(Expression),
 }
 
@@ -202,6 +206,14 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 			&& self.next_if_eq(Token::Semicolon)
 		{
 			Some(Stmts::Assignment(ident, expression))
+		} else if self.next_if_eq(Token::Keyword(Reserved::Break))
+			&& self.next_if_eq(Token::Semicolon)
+		{
+			Some(Stmts::Break)
+		} else if self.next_if_eq(Token::Keyword(Reserved::Continue))
+			&& self.next_if_eq(Token::Semicolon)
+		{
+			Some(Stmts::Continue)
 		} else {
 			Some(Stmts::Return(
 				self.next_if_eq(Token::Keyword(Reserved::Return))

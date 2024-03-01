@@ -131,6 +131,8 @@ pub enum Reserved {
 	Int,
 	Return,
 	While,
+	Break,
+	Continue,
 }
 
 pub fn tokenize(input_stream: &str) -> LexerOutput {
@@ -328,6 +330,8 @@ fn keywords(id: &str) -> Option<Token> {
 		"int" => Some(Token::Keyword(Reserved::Int)),
 		"return" => Some(Token::Keyword(Reserved::Return)),
 		"while" => Some(Token::Keyword(Reserved::While)),
+		"break" => Some(Token::Keyword(Reserved::Break)),
+		"continue" => Some(Token::Keyword(Reserved::Continue)),
 		_ => None,
 	}
 }

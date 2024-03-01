@@ -6,18 +6,17 @@
 use crate::parser::{DirectValue, Expression, Ident, Program, Scope, Stmts};
 
 #[derive(Debug)]
-pub struct SemanticError(pub SemanticErrorKind, pub Ident);
-
-#[derive(Debug)]
-pub enum SemanticErrorKind {
-	UseBeforeDeclaration,
-	MultipleDeclaration,
+pub enum SemanticError {
+	UseBeforeDeclaration(Ident),
+	MultipleDeclaration(Ident),
+	ContinueOutsideLoop,
+	BreakOutsideLoop,
 }
 
 pub fn analyze(program: &Program) -> Result<(), SemanticError> {
 	let Program(global_scope) = program;
 	let mut stack = ScopeStack(Vec::new());
-	stack.scope_analyze(global_scope)
+	stack.scope_analyze(global_scope, false)
 }
 
 type ScopeTable = Vec<usize>;
@@ -46,15 +45,14 @@ impl ScopeStack {
 			}
 		}
 	}
-	fn scope_analyze(&mut self, scope: &Scope) -> Result<(), SemanticError> {
+	fn scope_analyze(&mut self, scope: &Scope, in_loop: bool) -> Result<(), SemanticError> {
 		self.0.push(ScopeTable::new());
 		for stmt in scope.0.iter() {
-			use SemanticErrorKind::*;
 			match stmt {
 				Stmts::Decl(ident) => {
 					let current_table = self.0.last_mut().unwrap();
 					if current_table.contains(&ident.table_index) {
-						return Err(SemanticError(MultipleDeclaration, *ident));
+						return Err(SemanticError::MultipleDeclaration(*ident));
 					}
 					current_table.push(ident.table_index)
 				}
@@ -63,17 +61,27 @@ impl ScopeStack {
 						.find_ident(ident)
 						.and_then(|_| self.expression_valid(expr))
 					{
-						return Err(SemanticError(UseBeforeDeclaration, ident));
+						return Err(SemanticError::UseBeforeDeclaration(ident));
 					}
 				}
 				Stmts::If(expr, scope) | Stmts::While(expr, scope) => {
 					self.expression_valid(expr)
-						.map_err(|ident| SemanticError(UseBeforeDeclaration, ident))?;
-					self.scope_analyze(scope)?
+						.map_err(|ident| SemanticError::UseBeforeDeclaration(ident))?;
+					self.scope_analyze(scope, matches!(stmt, Stmts::While(_, _)))?
 				}
 				Stmts::Return(expr) => {
 					if let Err(ident) = self.expression_valid(expr) {
-						return Err(SemanticError(UseBeforeDeclaration, ident));
+						return Err(SemanticError::UseBeforeDeclaration(ident));
+					}
+				}
+				Stmts::Break => {
+					if !in_loop {
+						return Err(SemanticError::BreakOutsideLoop);
+					}
+				}
+				Stmts::Continue => {
+					if !in_loop {
+						return Err(SemanticError::ContinueOutsideLoop);
 					}
 				}
 			}

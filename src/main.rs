@@ -12,11 +12,16 @@ fn main() {
 	let (parsed, ident_table) = parser::parse(lexer_output.clone()).unwrap();
 	println!("Parse Tree: {parsed:#?}");
 	println!("Ident Table: {ident_table:#?}");
-	if let Err(analyzer::SemanticError(kind, identifier)) = analyzer::analyze(&parsed) {
-		panic!(
-			"Err: '{kind:?}' at '{identifier:?}' name: {:?}",
-			ident_table.0.get(identifier.table_index)
-		)
+	if let Err(kind) = analyzer::analyze(&parsed) {
+		use analyzer::SemanticError;
+		match kind {
+			SemanticError::UseBeforeDeclaration(ident)
+			| SemanticError::MultipleDeclaration(ident) => panic!(
+				"Err: '{kind:?}' at '{ident:?}' name: {:?}",
+				ident_table.0.get(ident.table_index)
+			),
+			_ => panic!("Semantic Error: {kind:?}"),
+		}
 	}
 	let tac_instructions = tac_gen::generate(&parsed, ident_table.0.len());
 	println!("Code Gen: {tac_instructions:#?}");
