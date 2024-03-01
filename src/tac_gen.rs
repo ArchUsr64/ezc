@@ -99,7 +99,7 @@ impl TACGen {
 					];
 					let scope_len = sub_scope.len();
 					while_block.append(&mut sub_scope);
-					while_block.push(Instruction::Goto(-(scope_len as isize) - 3));
+					while_block.push(Instruction::Goto(-(scope_len as isize) - 2));
 					while_block
 				}
 				Stmts::Return(expr) => {
@@ -124,6 +124,7 @@ impl TACGen {
 					if_block.append(&mut sub_scope);
 					if_block
 				}
+				_ => todo!(),
 			};
 			instructions.append(&mut generated_instructions);
 		}
