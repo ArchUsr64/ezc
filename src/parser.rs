@@ -127,15 +127,7 @@ pub fn parse(lexer_output: LexerOutput) -> Result<(Program, IdentNameTable), Opt
 	let res = Ok((Program(Scope(statement_root)), IdentNameTable(identifier)));
 	if parser
 		.symbols
-		.next_if(|i| {
-			matches!(
-				i,
-				Symbol {
-					token: Token::Eof,
-					..
-				}
-			)
-		})
+		.next_if(|i| matches!(i, Symbol(Token::Eof, ..)))
 		.is_some()
 	{
 		res
@@ -151,17 +143,16 @@ struct Parser<I: Iterator<Item = Symbol>> {
 }
 impl<I: Iterator<Item = Symbol>> Parser<I> {
 	fn next_if_eq(&mut self, needle: Token) -> bool {
-		self.symbols.next_if(|&i| i.token == needle).is_some()
+		self.symbols.next_if(|&i| i.token() == needle).is_some()
 	}
 	fn next_if(&mut self, func: impl Fn(Token) -> bool) -> Option<Token> {
-		self.symbols.next_if(|&i| func(i.token)).map(|i| i.token)
+		self.symbols
+			.next_if(|&i| func(i.token()))
+			.map(|i| i.token())
 	}
 	fn ident(&mut self) -> Option<Ident> {
 		match self.symbols.peek() {
-			Some(Symbol {
-				token: Token::Identifier(index),
-				line_number,
-			}) => Some(Ident {
+			Some(Symbol(Token::Identifier(index), line_number)) => Some(Ident {
 				line_number: *line_number,
 				table_index: *index,
 			})
@@ -250,8 +241,8 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 	}
 	fn binary_operation(&mut self) -> Option<BinaryOperation> {
 		self.symbols
-			.next_if(|tk| BinaryOperation::from_token(&tk.token).is_some())
-			.map(|tk| BinaryOperation::from_token(&tk.token))?
+			.next_if(|tk| BinaryOperation::from_token(&tk.token()).is_some())
+			.map(|tk| BinaryOperation::from_token(&tk.token()))?
 	}
 	fn parse_const(&self, value: &str) -> Option<i32> {
 		if let Ok(val) = value.parse::<i32>() {

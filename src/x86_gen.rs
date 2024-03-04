@@ -51,6 +51,7 @@ pub fn x86_gen(tac_instruction: Vec<tac_gen::Instruction>) -> String {
 		.enumerate()
 		.map(|(i, tac)| {
 			let mut asm = Vec::new();
+			asm.push(format!("\n# {tac:?}, {i}"));
 			if let Some(label_index) = goto_label_map.get(&(i as isize)) {
 				asm.push(format!("G{label_index}:"));
 			}
@@ -68,7 +69,7 @@ pub fn x86_gen(tac_instruction: Vec<tac_gen::Instruction>) -> String {
 						*label_index
 					} else {
 						label_count += 1;
-						if_label_map.insert(i + *offset, label_count);
+						if_label_map.insert(i + *offset + 1, label_count);
 						label_count
 					};
 					vec![

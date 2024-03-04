@@ -65,13 +65,16 @@ pub enum Token {
 	Eof,
 }
 
+/// Tuple struct of `Token` and the corresponding `line_number: usize`
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Symbol {
-	pub token: Token,
-	pub line_number: usize,
+pub struct Symbol(pub Token, pub usize);
+impl Symbol {
+	pub fn token(&self) -> Token {
+		self.0
+	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct SymbolTable {
 	pub identifier: Vec<String>,
 	pub consts: Vec<String>,
@@ -107,22 +110,10 @@ impl SymbolTable {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct LexerOutput {
 	pub symbol_table: SymbolTable,
 	pub symbol: Vec<Symbol>,
-}
-impl LexerOutput {
-	fn new() -> Self {
-		Self {
-			symbol_table: SymbolTable {
-				identifier: Vec::new(),
-				consts: Vec::new(),
-				literal: Vec::new(),
-			},
-			symbol: Vec::new(),
-		}
-	}
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -139,7 +130,7 @@ pub fn tokenize(input_stream: &str) -> LexerOutput {
 	let LexerOutput {
 		mut symbol_table,
 		mut symbol,
-	} = LexerOutput::new();
+	} = LexerOutput::default();
 	let is_identifier_symbol = |char: char| char.is_alphanumeric() || char == '_';
 	let mut stream_iter = input_stream.chars().peekable();
 	let mut line_number = 1;
@@ -153,7 +144,6 @@ pub fn tokenize(input_stream: &str) -> LexerOutput {
 		// Handle line comments
 		if current == '/' && stream_iter.peek().is_some_and(|x| *x == '/') {
 			while stream_iter.next_if(|x| *x != '\n').is_some() {}
-			line_number += 1;
 			continue;
 		}
 		if current == '/' && stream_iter.next_if(|x| *x == '*').is_some() {
@@ -309,15 +299,9 @@ pub fn tokenize(input_stream: &str) -> LexerOutput {
 			'}' => Token::RightBrace,
 			x => todo!("{x} at line#{line_number}"),
 		};
-		symbol.push(Symbol {
-			token: matched_token,
-			line_number,
-		});
+		symbol.push(Symbol(matched_token, line_number));
 	}
-	symbol.push(Symbol {
-		token: Token::Eof,
-		line_number,
-	});
+	symbol.push(Symbol(Token::Eof, line_number));
 	LexerOutput {
 		symbol_table,
 		symbol,
@@ -333,5 +317,131 @@ fn keywords(id: &str) -> Option<Token> {
 		"break" => Some(Token::Keyword(Reserved::Break)),
 		"continue" => Some(Token::Keyword(Reserved::Continue)),
 		_ => None,
+	}
+}
+
+mod test {
+	#[allow(unused_imports)]
+	use super::*;
+	#[test]
+	fn comments() {
+		assert_eq!(
+			LexerOutput {
+				symbol: vec![Symbol(Token::Eof, 1)],
+				..Default::default()
+			},
+			tokenize("")
+		);
+		assert_eq!(
+			LexerOutput {
+				symbol: vec![Symbol(Token::Eof, 1)],
+				..Default::default()
+			},
+			tokenize("//")
+		);
+		assert_eq!(
+			LexerOutput {
+				symbol: vec![Symbol(Token::Eof, 3)],
+				..Default::default()
+			},
+			tokenize(
+				r"
+				/*
+					Some text
+				*/
+				"
+			)
+		);
+	}
+	#[test]
+	fn program() {
+		use Reserved::*;
+		use Token::*;
+		assert_eq!(
+			LexerOutput {
+				symbol_table: SymbolTable {
+					identifier: vec!["first".into(), "second".into(), "i".into(), "temp".into()],
+					consts: vec!["1".into(), "0".into(), "10".into()],
+					..Default::default()
+				},
+				symbol: vec![
+					Symbol(Keyword(Int), 3),
+					Symbol(Identifier(0), 3),
+					Symbol(Semicolon, 3),
+					Symbol(Keyword(Int), 4),
+					Symbol(Identifier(1), 4),
+					Symbol(Semicolon, 4),
+					Symbol(Keyword(Int), 5),
+					Symbol(Identifier(2), 5),
+					Symbol(Semicolon, 5),
+					Symbol(Identifier(2), 6),
+					Symbol(Equal, 6),
+					Symbol(Const(0), 6),
+					Symbol(Semicolon, 6),
+					Symbol(Identifier(0), 7),
+					Symbol(Equal, 7),
+					Symbol(Const(1), 7),
+					Symbol(Semicolon, 7),
+					Symbol(Identifier(1), 8),
+					Symbol(Equal, 8),
+					Symbol(Const(0), 8),
+					Symbol(Semicolon, 8),
+					Symbol(Keyword(While), 9),
+					Symbol(LeftParenthesis, 9),
+					Symbol(Identifier(2), 9),
+					Symbol(Less, 9),
+					Symbol(Const(2), 9),
+					Symbol(RightParenthesis, 9),
+					Symbol(LeftBrace, 9),
+					Symbol(Keyword(Int), 10),
+					Symbol(Identifier(3), 10),
+					Symbol(Semicolon, 10),
+					Symbol(Identifier(3), 11),
+					Symbol(Equal, 11),
+					Symbol(Identifier(1), 11),
+					Symbol(Semicolon, 11),
+					Symbol(Identifier(1), 12),
+					Symbol(Equal, 12),
+					Symbol(Identifier(0), 12),
+					Symbol(Plus, 12),
+					Symbol(Identifier(3), 12),
+					Symbol(Semicolon, 12),
+					Symbol(Identifier(0), 13),
+					Symbol(Equal, 13),
+					Symbol(Identifier(3), 13),
+					Symbol(Semicolon, 13),
+					Symbol(Identifier(2), 14),
+					Symbol(Equal, 14),
+					Symbol(Identifier(2), 14),
+					Symbol(Plus, 14),
+					Symbol(Const(0), 14),
+					Symbol(Semicolon, 14),
+					Symbol(RightBrace, 15),
+					Symbol(Keyword(Return), 16),
+					Symbol(Identifier(1), 16),
+					Symbol(Semicolon, 16),
+					Symbol(Eof, 17)
+				]
+			},
+			tokenize(
+				r"
+// Compute the 10th fibonnaci number
+int first;
+int second;
+int i;
+i = 1;
+first = 0;
+second = 1;
+while (i < 10) {
+	int temp;
+	temp = second;
+	second = first + temp;
+	first = temp;
+	i = i + 1;
+}
+return second;
+",
+			)
+		);
 	}
 }
