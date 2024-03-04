@@ -47,7 +47,14 @@ pub fn x86_gen(tac_instruction: Vec<tac_gen::Instruction>) -> String {
 		}
 	}
 	for (i, instruction) in tac_instruction.iter().enumerate() {
-		let mut instructions = match instruction {
+		let mut instructions = Vec::new();
+		if let Some(label_index) = goto_label_map.get(&(i as isize)) {
+			instructions.push(format!("G{label_index}:"));
+		}
+		if let Some(label_index) = if_label_map.get(&i) {
+			instructions.push(format!("L{label_index}:"));
+		}
+		instructions.append(&mut match instruction {
 			Instruction::Return(op) => vec![
 				format!("mov %eax, {}", allocator.parse_operand(*op)),
 				format!("jmp END"),
@@ -69,13 +76,7 @@ pub fn x86_gen(tac_instruction: Vec<tac_gen::Instruction>) -> String {
 			Instruction::Goto(offset) => {
 				vec![format!("jmp G{}", goto_label_map[&(*offset + i as isize)])]
 			}
-		};
-		if let Some(label_index) = goto_label_map.get(&(i as isize)) {
-			instructions.insert(0, format!("G{label_index}:"));
-		}
-		if let Some(label_index) = if_label_map.get(&i) {
-			instructions.push(format!("L{label_index}:"));
-		}
+		});
 		instructions.iter_mut().for_each(|i| {
 			res += format!("	{i}\n").as_str();
 			i.insert(0, '\t');

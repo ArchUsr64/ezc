@@ -95,7 +95,7 @@ impl TACGen {
 							Operand::Temporary(self.temp_count),
 							self.generate_rvalue(expr),
 						),
-						Instruction::Ifz(Operand::Temporary(self.temp_count), sub_scope.len() + 1),
+						Instruction::Ifz(Operand::Temporary(self.temp_count), sub_scope.len() + 2),
 					];
 					let scope_len = sub_scope.len();
 					while_block.append(&mut sub_scope);
