@@ -46,43 +46,55 @@ pub fn x86_gen(tac_instruction: Vec<tac_gen::Instruction>) -> String {
 			_ => continue,
 		}
 	}
-	for (i, instruction) in tac_instruction.iter().enumerate() {
-		let mut instructions = Vec::new();
-		if let Some(label_index) = goto_label_map.get(&(i as isize)) {
-			instructions.push(format!("G{label_index}:"));
-		}
-		if let Some(label_index) = if_label_map.get(&i) {
-			instructions.push(format!("L{label_index}:"));
-		}
-		instructions.append(&mut match instruction {
-			Instruction::Return(op) => vec![
-				format!("mov %eax, {}", allocator.parse_operand(*op)),
-				format!("jmp END"),
-			],
-			Instruction::Expression(op, r_value) => allocator.expression_gen(*op, *r_value),
-			Instruction::Ifz(op, offset) => {
-				let label_id = if let Some(label_index) = if_label_map.get(&(i + *offset)) {
-					*label_index
-				} else {
-					label_count += 1;
-					if_label_map.insert(i + *offset, label_count);
-					label_count
-				};
-				vec![
-					format!("cmp {}, 0", allocator.parse_operand(*op)),
-					format!("je L{label_id}"),
-				]
+	let asm_instructions = tac_instruction
+		.iter()
+		.enumerate()
+		.map(|(i, tac)| {
+			let mut asm = Vec::new();
+			if let Some(label_index) = goto_label_map.get(&(i as isize)) {
+				asm.push(format!("G{label_index}:"));
 			}
-			Instruction::Goto(offset) => {
-				vec![format!("jmp G{}", goto_label_map[&(*offset + i as isize)])]
+			if let Some(label_index) = if_label_map.get(&i) {
+				asm.push(format!("L{label_index}:"));
 			}
-		});
-		instructions.iter_mut().for_each(|i| {
-			res += format!("	{i}\n").as_str();
-			i.insert(0, '\t');
-			i.push('\n')
-		});
-	}
+			asm.append(&mut match tac {
+				Instruction::Return(op) => vec![
+					format!("mov %eax, {}", allocator.parse_operand(*op)),
+					format!("jmp END"),
+				],
+				Instruction::Expression(op, r_value) => allocator.expression_gen(*op, *r_value),
+				Instruction::Ifz(op, offset) => {
+					let label_id = if let Some(label_index) = if_label_map.get(&(i + *offset)) {
+						*label_index
+					} else {
+						label_count += 1;
+						if_label_map.insert(i + *offset, label_count);
+						label_count
+					};
+					vec![
+						format!("cmp {}, 0", allocator.parse_operand(*op)),
+						format!("je L{label_id}"),
+					]
+				}
+				Instruction::Goto(offset) => {
+					vec![format!("jmp G{}", goto_label_map[&(*offset + i as isize)])]
+				}
+			});
+			println!("{if_label_map:?}");
+			if i == tac_instruction.len() - 1
+				&& let Some(label_id) = if_label_map.remove(&tac_instruction.len())
+			{
+				asm.push(format!("L{label_id}:"));
+			}
+			asm
+		})
+		.flatten();
+	res.push_str(
+		asm_instructions
+			.map(|asm| format!("	{asm}\n"))
+			.collect::<String>()
+			.as_str(),
+	);
 	res.push_str(EPILOGUE);
 	res
 }
