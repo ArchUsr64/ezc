@@ -1,11 +1,9 @@
 //! Three Address Code Generation
 use crate::parser::{self, Program};
 
+/// Tuple struct with `name_index` as the first element and `scope_id` as the next
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct BindedIdent {
-	name_index: usize,
-	scope_id: usize,
-}
+pub struct BindedIdent(usize, usize);
 
 #[derive(Debug, Clone, Copy)]
 pub enum Operand {
@@ -54,10 +52,7 @@ impl TACGen {
 	}
 	fn generate_ident(&self, ident: &parser::Ident) -> BindedIdent {
 		let name_index = ident.table_index;
-		BindedIdent {
-			name_index,
-			scope_id: *self.scope_map[name_index].last().unwrap(),
-		}
+		BindedIdent(name_index, *self.scope_map[name_index].last().unwrap())
 	}
 	fn generate_rvalue(&self, expr: &parser::Expression) -> RValue {
 		use parser::{DirectValue, Expression};
