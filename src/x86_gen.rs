@@ -19,6 +19,7 @@ test_func:
 const PROLOGUE: &str = r"
 	push %rbp
 	mov %rbp, %rsp
+	xor %eax, %eax
 ";
 
 const EPILOGUE: &str = r"
