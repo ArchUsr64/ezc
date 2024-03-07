@@ -3,6 +3,9 @@
 //!
 //! Grammar:
 //! ```c
+//! <Func>
+//! | int Ident() {<Stmts>*}
+//!
 //! <Stmts>
 //! | if (<Expression>) {<Stmts>*}
 //! | while (<Expression>) {<Stmts>*}
@@ -17,6 +20,7 @@
 //! | <DirectValue> <BinaryOperation> <DirectValue>
 //!
 //! <DirectValue>
+//! | Ident()
 //! | Ident
 //! | Const
 //!
@@ -24,13 +28,13 @@
 //! | +, -, *, /, %, &, |, ^, <, <=, >, >=, ==, !=
 //!
 //! ```
-//! Where a `Program` is just `Vec<Stmts>`
+//! Where a `Program` is just `Vec<Func>`
 use std::iter::Peekable;
 
 use crate::lexer::{LexerOutput, Reserved, Symbol, SymbolTable, Token};
 
 #[derive(Clone, Debug)]
-pub struct Program(pub Scope);
+pub struct Program(pub Vec<Func>);
 
 #[derive(Clone, Debug)]
 pub struct IdentNameTable(pub Vec<String>);
@@ -43,6 +47,10 @@ pub struct Ident {
 	line_number: usize,
 	pub table_index: usize,
 }
+
+/// Tuple struct of the function's name as `Ident` and the respective `Scope`
+#[derive(Clone, Debug)]
+pub struct Func(Ident, Scope);
 
 #[derive(Clone, Debug)]
 pub enum Stmts {
@@ -120,11 +128,11 @@ pub fn parse(lexer_output: LexerOutput) -> Result<(Program, IdentNameTable), Opt
 		symbols: symbol.iter().copied().peekable(),
 		const_table: consts,
 	};
-	let mut statement_root = Vec::new();
-	while let Some(stmt) = parser.stmts() {
-		statement_root.push(stmt);
+	let mut functions = Vec::new();
+	while let Some(func) = parser.func() {
+		functions.push(func);
 	}
-	let res = Ok((Program(Scope(statement_root)), IdentNameTable(identifier)));
+	let res = Ok((Program(functions), IdentNameTable(identifier)));
 	if parser
 		.symbols
 		.next_if(|i| matches!(i, Symbol(Token::Eof, ..)))
@@ -158,6 +166,26 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 			})
 			.take_if(|_| self.symbols.next().is_some()),
 			_ => None,
+		}
+	}
+	fn func(&mut self) -> Option<Func> {
+		let mut scope = Vec::new();
+		if self.next_if_eq(Token::Keyword(Reserved::Int))
+			&& let Some(id) = self.ident()
+			&& self.next_if_eq(Token::LeftParenthesis)
+			&& self.next_if_eq(Token::RightParenthesis)
+			&& self.next_if_eq(Token::LeftBrace)
+		{
+			while let Some(stmt) = self.stmts() {
+				scope.push(stmt);
+			}
+			if self.next_if_eq(Token::RightBrace) {
+				Some(Func(id, Scope(scope)))
+			} else {
+				None
+			}
+		} else {
+			None
 		}
 	}
 	fn stmts(&mut self) -> Option<Stmts> {
