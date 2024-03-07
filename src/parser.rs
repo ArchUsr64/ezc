@@ -67,7 +67,7 @@ pub enum DirectValue {
 	Const(i32),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BinaryOperation {
 	Add,
 	Sub,

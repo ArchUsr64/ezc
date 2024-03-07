@@ -5,14 +5,14 @@ use crate::parser::{self, Program};
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct BindedIdent(usize, usize);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operand {
 	Ident(BindedIdent),
 	Temporary(usize),
 	Immediate(i32),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RValue {
 	Assignment(Operand),
 	Operation(Operand, parser::BinaryOperation, Operand),
@@ -20,7 +20,7 @@ pub enum RValue {
 
 type AddressOffset = usize;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instruction {
 	Ifz(Operand, AddressOffset),
 	Expression(Operand, RValue),
@@ -114,7 +114,7 @@ impl TACGen {
 							Operand::Temporary(self.temp_count),
 							self.generate_rvalue(expr),
 						),
-						Instruction::Ifz(Operand::Temporary(self.temp_count), sub_scope.len()),
+						Instruction::Ifz(Operand::Temporary(self.temp_count), sub_scope.len() + 1),
 					];
 					if_block.append(&mut sub_scope);
 					if_block
@@ -125,5 +125,165 @@ impl TACGen {
 		}
 		self.scope_id += 1;
 		instructions
+	}
+}
+
+mod test {
+	#[allow(unused_imports)]
+	use crate::{
+		analyzer::analyze, lexer::tokenize, parser::parse, parser::BinaryOperation, tac_gen,
+	};
+
+	#[allow(unused_imports)]
+	use super::*;
+	#[test]
+	fn assignments() {
+		let test_program = r"
+			int x;
+			x = 5;
+			return x;
+		";
+		let tac_expected = vec![
+			Instruction::Expression(
+				Operand::Ident(BindedIdent(0, 0)),
+				RValue::Assignment(Operand::Immediate(5)),
+			),
+			Instruction::Expression(
+				Operand::Temporary(0),
+				RValue::Assignment(Operand::Ident(BindedIdent(0, 0))),
+			),
+			Instruction::Return(Operand::Temporary(0)),
+		];
+		let (parsed, table) = parse(tokenize(test_program)).unwrap();
+		assert_eq!(tac_expected, generate(&parsed, table.0.len()));
+	}
+
+	#[test]
+	fn ifz() {
+		let test_program = "if (1) {}";
+		let tac_expected = vec![
+			Instruction::Expression(
+				Operand::Temporary(0),
+				RValue::Assignment(Operand::Immediate(1)),
+			),
+			Instruction::Ifz(Operand::Temporary(0), 1),
+		];
+		let (parsed, table) = parse(tokenize(test_program)).unwrap();
+		assert_eq!(tac_expected, generate(&parsed, table.0.len()));
+
+		let test_program = r"
+			int x;
+			x = 5;
+			if (x <= 4) {
+				x = 2;
+			}
+			return x;
+		";
+		let tac_expected = vec![
+			Instruction::Expression(
+				Operand::Ident(BindedIdent(0, 0)),
+				RValue::Assignment(Operand::Immediate(5)),
+			),
+			Instruction::Expression(
+				Operand::Temporary(0),
+				RValue::Operation(
+					Operand::Ident(BindedIdent(0, 0)),
+					BinaryOperation::LessEqual,
+					Operand::Immediate(4),
+				),
+			),
+			Instruction::Ifz(Operand::Temporary(0), 2),
+			Instruction::Expression(
+				Operand::Ident(BindedIdent(0, 0)),
+				RValue::Assignment(Operand::Immediate(2)),
+			),
+			Instruction::Expression(
+				Operand::Temporary(0),
+				RValue::Assignment(Operand::Ident(BindedIdent(0, 0))),
+			),
+			Instruction::Return(Operand::Temporary(0)),
+		];
+		let (parsed, table) = parse(tokenize(test_program)).unwrap();
+		assert_eq!(tac_expected, generate(&parsed, table.0.len()));
+
+		let test_program = r"
+			int x;
+			x = 5;
+			if (x <= 4) {
+				x = x * 2;
+				if (x > 9) {
+					x = 5;
+					x = 9;
+					x = 2;
+				}
+			}
+			return x;
+		";
+		let tac_expected = vec![
+			Instruction::Expression(
+				Operand::Ident(BindedIdent(0, 0)),
+				RValue::Assignment(Operand::Immediate(5)),
+			),
+			Instruction::Expression(
+				Operand::Temporary(0),
+				RValue::Operation(
+					Operand::Ident(BindedIdent(0, 0)),
+					BinaryOperation::LessEqual,
+					Operand::Immediate(4),
+				),
+			),
+			Instruction::Ifz(Operand::Temporary(0), 7),
+			Instruction::Expression(
+				Operand::Ident(BindedIdent(0, 0)),
+				RValue::Operation(
+					Operand::Ident(BindedIdent(0, 0)),
+					BinaryOperation::Mul,
+					Operand::Immediate(2),
+				),
+			),
+			Instruction::Expression(
+				Operand::Temporary(0),
+				RValue::Operation(
+					Operand::Ident(BindedIdent(0, 0)),
+					BinaryOperation::Greater,
+					Operand::Immediate(9),
+				),
+			),
+			Instruction::Ifz(Operand::Temporary(0), 4),
+			Instruction::Expression(
+				Operand::Ident(BindedIdent(0, 0)),
+				RValue::Assignment(Operand::Immediate(5)),
+			),
+			Instruction::Expression(
+				Operand::Ident(BindedIdent(0, 0)),
+				RValue::Assignment(Operand::Immediate(9)),
+			),
+			Instruction::Expression(
+				Operand::Ident(BindedIdent(0, 0)),
+				RValue::Assignment(Operand::Immediate(2)),
+			),
+			Instruction::Expression(
+				Operand::Temporary(0),
+				RValue::Assignment(Operand::Ident(BindedIdent(0, 0))),
+			),
+			Instruction::Return(Operand::Temporary(0)),
+		];
+		let (parsed, table) = parse(tokenize(test_program)).unwrap();
+		assert_eq!(tac_expected, generate(&parsed, table.0.len()));
+	}
+
+	#[test]
+	fn while_loops() {
+		let test_program = "while (1) {}";
+		let tac_expected = vec![
+			Instruction::Expression(
+				Operand::Temporary(0),
+				RValue::Assignment(Operand::Immediate(1)),
+			),
+			Instruction::Ifz(Operand::Temporary(0), 2),
+			Instruction::Goto(-2),
+		];
+		let (parsed, table) = parse(tokenize(test_program)).unwrap();
+		assert_eq!(tac_expected, generate(&parsed, table.0.len()));
 	}
 }
