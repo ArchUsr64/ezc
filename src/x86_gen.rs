@@ -29,34 +29,32 @@ const EPILOGUE: &str = r"
 
 pub fn x86_gen(tac_instruction: Vec<tac_gen::Instruction>) -> String {
 	let mut res = PRELUDE.to_string();
-	let mut label_count = 0;
+	let mut if_count = 0;
 	let mut goto_count = 0;
-	// Map from the instruction index to the label count
-	let mut if_label_map: HashMap<usize, usize> = HashMap::new();
-	let mut goto_label_map: HashMap<isize, usize> = HashMap::new();
+	// Stores the list of instructions
+	let mut if_jumps = Vec::new();
+	let mut goto_jumps = Vec::new();
 	res.push_str(PROLOGUE);
 	let mut allocator = StackAllocator::new();
 	use tac_gen::Instruction;
 	for (i, instruction) in tac_instruction.iter().enumerate() {
 		match instruction {
 			Instruction::Goto(offset) => {
-				goto_count += 1;
-				goto_label_map.insert(i as isize + *offset, goto_count);
+				goto_jumps.push(i as isize + *offset);
+			}
+			Instruction::Ifz(_, offset) => {
+				if_jumps.push(i + *offset);
 			}
 			_ => continue,
 		}
 	}
-	let asm_instructions = tac_instruction
+	let mut asm_instructions: Vec<Vec<String>> = tac_instruction
 		.iter()
 		.enumerate()
 		.map(|(i, tac)| {
 			let mut asm = Vec::new();
-			asm.push(format!("\n# {tac:?}, {i}"));
-			if let Some(label_index) = goto_label_map.get(&(i as isize)) {
-				asm.push(format!("G{label_index}:"));
-			}
-			if let Some(label_index) = if_label_map.get(&i) {
-				asm.push(format!("L{label_index}:"));
+			if log::log_enabled!(log::Level::Debug) {
+				asm.push(format!("\n# {i}: {tac:?}"));
 			}
 			asm.append(&mut match tac {
 				Instruction::Return(op) => vec![
@@ -64,35 +62,50 @@ pub fn x86_gen(tac_instruction: Vec<tac_gen::Instruction>) -> String {
 					format!("jmp END"),
 				],
 				Instruction::Expression(op, r_value) => allocator.expression_gen(*op, *r_value),
-				Instruction::Ifz(op, offset) => {
-					let label_id = if let Some(label_index) = if_label_map.get(&(i + *offset)) {
-						*label_index
-					} else {
-						label_count += 1;
-						if_label_map.insert(i + *offset + 1, label_count);
-						label_count
-					};
+				Instruction::Ifz(op, _) => {
+					if_count += 1;
 					vec![
 						format!("cmp {}, 0", allocator.parse_operand(*op)),
-						format!("je L{label_id}"),
+						format!("je L{}", if_count - 1),
 					]
 				}
-				Instruction::Goto(offset) => {
-					vec![format!("jmp G{}", goto_label_map[&(*offset + i as isize)])]
+				Instruction::Goto(_) => {
+					goto_count += 1;
+					vec![format!("jmp G{}", goto_count - 1)]
 				}
 			});
-			println!("{if_label_map:?}");
-			if i == tac_instruction.len() - 1
-				&& let Some(label_id) = if_label_map.remove(&tac_instruction.len())
-			{
-				asm.push(format!("L{label_id}:"));
-			}
 			asm
 		})
-		.flatten();
+		.collect();
+	if_jumps
+		.iter()
+		.enumerate()
+		.for_each(|(label_id, &tac_index)| {
+			if let Some(asm) = asm_instructions.get_mut(tac_index) {
+				asm.insert(0, format!("L{label_id}:"));
+			} else if let Some(last) = asm_instructions.last_mut() {
+				last.push(format!("L{label_id}:"));
+			}
+		});
+	goto_jumps
+		.iter()
+		.enumerate()
+		.for_each(|(label_id, &tac_index)| {
+			let tac_index = tac_index as usize;
+			if let Some(asm) = asm_instructions.get_mut(tac_index) {
+				asm.insert(0, format!("G{label_id}:"));
+			} else if let Some(last) = asm_instructions.last_mut() {
+				last.push(format!("G{label_id}:"));
+			};
+		});
 	res.push_str(
 		asm_instructions
-			.map(|asm| format!("	{asm}\n"))
+			.iter()
+			.flat_map(|asm_set| {
+				asm_set
+					.iter()
+					.map(|instruction| format!("\t{instruction}\n"))
+			})
 			.collect::<String>()
 			.as_str(),
 	);
