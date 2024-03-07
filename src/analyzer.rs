@@ -86,6 +86,7 @@ impl ScopeStack {
 				}
 			}
 		}
+		self.0.pop();
 		Ok(())
 	}
 }
