@@ -50,7 +50,7 @@ pub struct Ident {
 
 /// Tuple struct of the function's name as `Ident` and the respective `Scope`
 #[derive(Clone, Debug)]
-pub struct Func(Ident, Scope);
+pub struct Func(pub Ident, pub Scope);
 
 #[derive(Clone, Debug)]
 pub enum Stmts {

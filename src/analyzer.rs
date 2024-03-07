@@ -14,9 +14,12 @@ pub enum SemanticError {
 }
 
 pub fn analyze(program: &Program) -> Result<(), SemanticError> {
-	let Program(global_scope) = program;
-	let mut stack = ScopeStack(Vec::new());
-	stack.scope_analyze(global_scope, false)
+	let Program(functions) = program;
+	for function_scope in functions {
+		let mut stack = ScopeStack(Vec::new());
+		stack.scope_analyze(&function_scope.1, false)?
+	}
+	Ok(())
 }
 
 type ScopeTable = Vec<usize>;
