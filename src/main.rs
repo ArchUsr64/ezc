@@ -21,6 +21,11 @@ fn main() {
 				"Err: '{kind:?}' at '{ident:?}' name: {:?}",
 				ident_table.0.get(ident.table_index)
 			),
+			SemanticError::UndefinedFunction(ident)
+			| SemanticError::FunctionRedeclaration(ident) => panic!(
+				"Err: '{kind:?}' at '{ident:?}' name: {:?}",
+				ident_table.0.get(ident.table_index)
+			),
 			_ => panic!("Semantic Error: {kind:?}"),
 		}
 	}

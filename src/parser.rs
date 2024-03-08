@@ -47,10 +47,32 @@ pub struct Ident {
 	line_number: usize,
 	pub table_index: usize,
 }
+impl Ident {
+	fn as_func_name(&self) -> FuncName {
+		FuncName {
+			line_number: self.line_number,
+			table_index: self.table_index,
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FuncName {
+	line_number: usize,
+	pub table_index: usize,
+}
 
 /// Tuple struct of the function's name as `Ident` and the respective `Scope`
 #[derive(Clone, Debug)]
-pub struct Func(pub Ident, pub Scope);
+pub struct Func(FuncName, pub Scope);
+impl Func {
+	pub fn scope(&self) -> &Scope {
+		&self.1
+	}
+	pub fn name(&self) -> &FuncName {
+		&self.0
+	}
+}
 
 #[derive(Clone, Debug)]
 pub enum Stmts {
@@ -71,6 +93,7 @@ pub enum Expression {
 
 #[derive(Clone, Copy, Debug)]
 pub enum DirectValue {
+	FuncCall(FuncName),
 	Ident(Ident),
 	Const(i32),
 }
@@ -180,7 +203,7 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 				scope.push(stmt);
 			}
 			if self.next_if_eq(Token::RightBrace) {
-				Some(Func(id, Scope(scope)))
+				Some(Func(id.as_func_name(), Scope(scope)))
 			} else {
 				None
 			}
@@ -256,7 +279,15 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 	}
 	fn direct_value(&mut self) -> Option<DirectValue> {
 		if let Some(val) = self.ident() {
-			Some(DirectValue::Ident(val))
+			if self.next_if_eq(Token::LeftParenthesis) {
+				if self.next_if_eq(Token::RightParenthesis) {
+					Some(DirectValue::FuncCall(val.as_func_name()))
+				} else {
+					None
+				}
+			} else {
+				Some(DirectValue::Ident(val))
+			}
 		} else {
 			let sign = if self.next_if_eq(Token::Minus) { -1 } else { 1 };
 			match self.next_if(|i| matches!(i, Token::Const(_))) {

@@ -3,10 +3,14 @@
 //! Takes a reference to `parser::Program` and returns any errors if present
 //! Should be ran before going for code gen, since the later stages expect the
 //! program to be semantically sound.
-use crate::parser::{DirectValue, Expression, Ident, Program, Scope, Stmts};
+use std::collections::HashSet;
+
+use crate::parser::{DirectValue, Expression, FuncName, Ident, Program, Scope, Stmts};
 
 #[derive(Debug)]
 pub enum SemanticError {
+	UndefinedFunction(FuncName),
+	FunctionRedeclaration(FuncName),
 	UseBeforeDeclaration(Ident),
 	MultipleDeclaration(Ident),
 	ContinueOutsideLoop,
@@ -15,16 +19,27 @@ pub enum SemanticError {
 
 pub fn analyze(program: &Program) -> Result<(), SemanticError> {
 	let Program(functions) = program;
-	for function_scope in functions {
-		let mut stack = ScopeStack(Vec::new());
-		stack.scope_analyze(&function_scope.1, false)?
+	let mut defined_functions = HashSet::new();
+	for func in functions {
+		if !defined_functions.insert(func.name().table_index) {
+			return Err(SemanticError::FunctionRedeclaration(*func.name()));
+		}
+		let mut stack = ScopeStack::default();
+		stack.scope_analyze(&func.scope(), false)?;
+		if let Some(&undefined_func) = stack
+			.function_calls()
+			.iter()
+			.find(|name| !defined_functions.contains(&name.table_index))
+		{
+			return Err(SemanticError::UndefinedFunction(undefined_func));
+		}
 	}
 	Ok(())
 }
 
 type ScopeTable = Vec<usize>;
-#[derive(Debug)]
-struct ScopeStack(Vec<ScopeTable>);
+#[derive(Debug, Default)]
+struct ScopeStack(Vec<ScopeTable>, Vec<FuncName>);
 
 impl ScopeStack {
 	fn find_ident(&self, ident: &Ident) -> Result<(), Ident> {
@@ -34,10 +49,14 @@ impl ScopeStack {
 			Err(*ident)
 		}
 	}
-	fn expression_valid(&self, expr: &Expression) -> Result<(), Ident> {
-		let find_direct_value = |direct_value: &DirectValue| -> Result<(), Ident> {
+	fn expression_valid(&mut self, expr: &Expression) -> Result<(), Ident> {
+		let mut find_direct_value = |direct_value: &DirectValue| -> Result<(), Ident> {
 			match direct_value {
 				DirectValue::Ident(i) => self.find_ident(i),
+				DirectValue::FuncCall(i) => {
+					self.1.push(*i);
+					Ok(())
+				}
 				DirectValue::Const(_) => Ok(()),
 			}
 		};
@@ -47,6 +66,9 @@ impl ScopeStack {
 				find_direct_value(l_value).and_then(|_| find_direct_value(r_value))
 			}
 		}
+	}
+	fn function_calls(&self) -> &[FuncName] {
+		&self.1
 	}
 	fn scope_analyze(&mut self, scope: &Scope, in_loop: bool) -> Result<(), SemanticError> {
 		self.0.push(ScopeTable::new());
