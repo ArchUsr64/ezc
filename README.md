@@ -9,8 +9,12 @@ EZC (pronounced Easy-C) is a tiny subset of C
 `cd ezc`
 
 3. Compile and execute the provided example at [`src/test.c`](https://github.com/ArchUsr64/ezc/blob/main/src/test.c):  
-`make test`  
-### Input:
+`make test`
+
+**Dependencies:** Cargo, GCC, GNU Assembler, Make 
+
+### Example:
+[`src/test.c`](https://github.com/ArchUsr64/ezc/blob/main/src/test.c)
 ```c
 // Compute the nth fibonnaci number
 int fibb(int n) {
