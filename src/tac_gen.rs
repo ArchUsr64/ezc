@@ -14,6 +14,7 @@ pub enum Operand {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RValue {
+	FuncCall(usize),
 	Assignment(Operand),
 	Operation(Operand, parser::BinaryOperation, Operand),
 }
@@ -28,11 +29,24 @@ pub enum Instruction {
 	Goto(isize),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Function {
+	pub id: usize,
+	pub instructions: Vec<Instruction>,
+}
+
 /// Assumes the program is semantically sound, should only be ran after
 /// `analyzer::analyze` returns `Ok(())`
-pub fn generate(program: &Program, ident_count: usize) -> Vec<Instruction> {
+pub fn generate(program: &Program, ident_count: usize) -> Vec<Function> {
 	let mut generator = TACGen::new(ident_count);
-	generator.scope_gen(&program.0)
+	program
+		.0
+		.iter()
+		.map(|function| Function {
+			id: function.name().table_index,
+			instructions: generator.generate_scope(function.scope()),
+		})
+		.collect()
 }
 
 struct TACGen {
@@ -63,13 +77,14 @@ impl TACGen {
 			}
 		};
 		match expr {
+			Expression::FuncCall(func) => RValue::FuncCall(func.table_index),
 			Expression::DirectValue(r_value) => RValue::Assignment(to_operand(r_value)),
 			Expression::BinaryExpression(l_value, op, r_value) => {
 				RValue::Operation(to_operand(l_value), *op, to_operand(r_value))
 			}
 		}
 	}
-	fn scope_gen(&mut self, scope: &parser::Scope) -> Vec<Instruction> {
+	fn generate_scope(&mut self, scope: &parser::Scope) -> Vec<Instruction> {
 		let mut instructions = Vec::new();
 		for stmt in scope.0.iter() {
 			use parser::{Ident, Stmts};
@@ -84,7 +99,7 @@ impl TACGen {
 				)],
 				Stmts::While(expr, scope) => {
 					self.scope_id += 1;
-					let mut sub_scope = self.scope_gen(scope);
+					let mut sub_scope = self.generate_scope(scope);
 					let mut while_block = vec![
 						Instruction::Expression(
 							Operand::Temporary(self.temp_count),
@@ -108,7 +123,7 @@ impl TACGen {
 				}
 				Stmts::If(expr, scope) => {
 					self.scope_id += 1;
-					let mut sub_scope = self.scope_gen(scope);
+					let mut sub_scope = self.generate_scope(scope);
 					let mut if_block = vec![
 						Instruction::Expression(
 							Operand::Temporary(self.temp_count),
@@ -139,149 +154,203 @@ mod test {
 	#[test]
 	fn assignments() {
 		let test_program = r"
-			int x;
-			x = 5;
-			return x;
+			int main() {
+				int x;
+				x = 5;
+				return x;
+			}
 		";
-		let tac_expected = vec![
-			Instruction::Expression(
-				Operand::Ident(BindedIdent(0, 0)),
-				RValue::Assignment(Operand::Immediate(5)),
-			),
-			Instruction::Expression(
-				Operand::Temporary(0),
-				RValue::Assignment(Operand::Ident(BindedIdent(0, 0))),
-			),
-			Instruction::Return(Operand::Temporary(0)),
-		];
+		let tac_expected = vec![Function {
+			id: 0,
+			instructions: vec![
+				Instruction::Expression(
+					Operand::Ident(BindedIdent(1, 0)),
+					RValue::Assignment(Operand::Immediate(5)),
+				),
+				Instruction::Expression(
+					Operand::Temporary(0),
+					RValue::Assignment(Operand::Ident(BindedIdent(1, 0))),
+				),
+				Instruction::Return(Operand::Temporary(0)),
+			],
+		}];
 		let (parsed, table) = parse(tokenize(test_program)).unwrap();
 		assert_eq!(tac_expected, generate(&parsed, table.0.len()));
 	}
 
 	#[test]
 	fn ifz() {
-		let test_program = "if (1) {}";
-		let tac_expected = vec![
-			Instruction::Expression(
-				Operand::Temporary(0),
-				RValue::Assignment(Operand::Immediate(1)),
-			),
-			Instruction::Ifz(Operand::Temporary(0), 1),
-		];
-		let (parsed, table) = parse(tokenize(test_program)).unwrap();
-		assert_eq!(tac_expected, generate(&parsed, table.0.len()));
-
-		let test_program = r"
-			int x;
-			x = 5;
-			if (x <= 4) {
-				x = 2;
-			}
-			return x;
-		";
-		let tac_expected = vec![
-			Instruction::Expression(
-				Operand::Ident(BindedIdent(0, 0)),
-				RValue::Assignment(Operand::Immediate(5)),
-			),
-			Instruction::Expression(
-				Operand::Temporary(0),
-				RValue::Operation(
-					Operand::Ident(BindedIdent(0, 0)),
-					BinaryOperation::LessEqual,
-					Operand::Immediate(4),
+		let test_program = "int main() {if (1) {}}";
+		let tac_expected = vec![Function {
+			id: 0,
+			instructions: vec![
+				Instruction::Expression(
+					Operand::Temporary(0),
+					RValue::Assignment(Operand::Immediate(1)),
 				),
-			),
-			Instruction::Ifz(Operand::Temporary(0), 2),
-			Instruction::Expression(
-				Operand::Ident(BindedIdent(0, 0)),
-				RValue::Assignment(Operand::Immediate(2)),
-			),
-			Instruction::Expression(
-				Operand::Temporary(0),
-				RValue::Assignment(Operand::Ident(BindedIdent(0, 0))),
-			),
-			Instruction::Return(Operand::Temporary(0)),
-		];
+				Instruction::Ifz(Operand::Temporary(0), 1),
+			],
+		}];
 		let (parsed, table) = parse(tokenize(test_program)).unwrap();
 		assert_eq!(tac_expected, generate(&parsed, table.0.len()));
 
 		let test_program = r"
-			int x;
-			x = 5;
-			if (x <= 4) {
-				x = x * 2;
-				if (x > 9) {
-					x = 5;
-					x = 9;
+			int main() {
+				int x;
+				x = 5;
+				if (x <= 4) {
 					x = 2;
 				}
+				return x;
 			}
-			return x;
 		";
-		let tac_expected = vec![
-			Instruction::Expression(
-				Operand::Ident(BindedIdent(0, 0)),
-				RValue::Assignment(Operand::Immediate(5)),
-			),
-			Instruction::Expression(
-				Operand::Temporary(0),
-				RValue::Operation(
-					Operand::Ident(BindedIdent(0, 0)),
-					BinaryOperation::LessEqual,
-					Operand::Immediate(4),
+		let tac_expected = vec![Function {
+			id: 0,
+			instructions: vec![
+				Instruction::Expression(
+					Operand::Ident(BindedIdent(1, 0)),
+					RValue::Assignment(Operand::Immediate(5)),
 				),
-			),
-			Instruction::Ifz(Operand::Temporary(0), 7),
-			Instruction::Expression(
-				Operand::Ident(BindedIdent(0, 0)),
-				RValue::Operation(
-					Operand::Ident(BindedIdent(0, 0)),
-					BinaryOperation::Mul,
-					Operand::Immediate(2),
+				Instruction::Expression(
+					Operand::Temporary(0),
+					RValue::Operation(
+						Operand::Ident(BindedIdent(1, 0)),
+						BinaryOperation::LessEqual,
+						Operand::Immediate(4),
+					),
 				),
-			),
-			Instruction::Expression(
-				Operand::Temporary(0),
-				RValue::Operation(
-					Operand::Ident(BindedIdent(0, 0)),
-					BinaryOperation::Greater,
-					Operand::Immediate(9),
+				Instruction::Ifz(Operand::Temporary(0), 2),
+				Instruction::Expression(
+					Operand::Ident(BindedIdent(1, 0)),
+					RValue::Assignment(Operand::Immediate(2)),
 				),
-			),
-			Instruction::Ifz(Operand::Temporary(0), 4),
-			Instruction::Expression(
-				Operand::Ident(BindedIdent(0, 0)),
-				RValue::Assignment(Operand::Immediate(5)),
-			),
-			Instruction::Expression(
-				Operand::Ident(BindedIdent(0, 0)),
-				RValue::Assignment(Operand::Immediate(9)),
-			),
-			Instruction::Expression(
-				Operand::Ident(BindedIdent(0, 0)),
-				RValue::Assignment(Operand::Immediate(2)),
-			),
-			Instruction::Expression(
-				Operand::Temporary(0),
-				RValue::Assignment(Operand::Ident(BindedIdent(0, 0))),
-			),
-			Instruction::Return(Operand::Temporary(0)),
-		];
+				Instruction::Expression(
+					Operand::Temporary(0),
+					RValue::Assignment(Operand::Ident(BindedIdent(1, 0))),
+				),
+				Instruction::Return(Operand::Temporary(0)),
+			],
+		}];
+		let (parsed, table) = parse(tokenize(test_program)).unwrap();
+		assert_eq!(tac_expected, generate(&parsed, table.0.len()));
+
+		let test_program = r"
+			int main() {
+				int x;
+				x = 5;
+				if (x <= 4) {
+					x = x * 2;
+					if (x > 9) {
+						x = 5;
+						x = 9;
+						x = 2;
+					}
+				}
+				return x;
+			}
+			";
+		let tac_expected = vec![Function {
+			id: 0,
+			instructions: vec![
+				Instruction::Expression(
+					Operand::Ident(BindedIdent(1, 0)),
+					RValue::Assignment(Operand::Immediate(5)),
+				),
+				Instruction::Expression(
+					Operand::Temporary(0),
+					RValue::Operation(
+						Operand::Ident(BindedIdent(1, 0)),
+						BinaryOperation::LessEqual,
+						Operand::Immediate(4),
+					),
+				),
+				Instruction::Ifz(Operand::Temporary(0), 7),
+				Instruction::Expression(
+					Operand::Ident(BindedIdent(1, 0)),
+					RValue::Operation(
+						Operand::Ident(BindedIdent(1, 0)),
+						BinaryOperation::Mul,
+						Operand::Immediate(2),
+					),
+				),
+				Instruction::Expression(
+					Operand::Temporary(0),
+					RValue::Operation(
+						Operand::Ident(BindedIdent(1, 0)),
+						BinaryOperation::Greater,
+						Operand::Immediate(9),
+					),
+				),
+				Instruction::Ifz(Operand::Temporary(0), 4),
+				Instruction::Expression(
+					Operand::Ident(BindedIdent(1, 0)),
+					RValue::Assignment(Operand::Immediate(5)),
+				),
+				Instruction::Expression(
+					Operand::Ident(BindedIdent(1, 0)),
+					RValue::Assignment(Operand::Immediate(9)),
+				),
+				Instruction::Expression(
+					Operand::Ident(BindedIdent(1, 0)),
+					RValue::Assignment(Operand::Immediate(2)),
+				),
+				Instruction::Expression(
+					Operand::Temporary(0),
+					RValue::Assignment(Operand::Ident(BindedIdent(1, 0))),
+				),
+				Instruction::Return(Operand::Temporary(0)),
+			],
+		}];
 		let (parsed, table) = parse(tokenize(test_program)).unwrap();
 		assert_eq!(tac_expected, generate(&parsed, table.0.len()));
 	}
 
 	#[test]
 	fn while_loops() {
-		let test_program = "while (1) {}";
+		let test_program = "int main() {while (1) {}}";
+		let tac_expected = vec![Function {
+			id: 0,
+			instructions: vec![
+				Instruction::Expression(
+					Operand::Temporary(0),
+					RValue::Assignment(Operand::Immediate(1)),
+				),
+				Instruction::Ifz(Operand::Temporary(0), 2),
+				Instruction::Goto(-2),
+			],
+		}];
+		let (parsed, table) = parse(tokenize(test_program)).unwrap();
+		assert_eq!(tac_expected, generate(&parsed, table.0.len()));
+	}
+
+	#[test]
+	fn func_calls() {
+		let test_program = r"
+			int return_1() {
+				return 1;
+			}
+			int main() {
+				return return_1();
+			}
+		";
 		let tac_expected = vec![
-			Instruction::Expression(
-				Operand::Temporary(0),
-				RValue::Assignment(Operand::Immediate(1)),
-			),
-			Instruction::Ifz(Operand::Temporary(0), 2),
-			Instruction::Goto(-2),
+			Function {
+				id: 0,
+				instructions: vec![
+					Instruction::Expression(
+						Operand::Temporary(0),
+						RValue::Assignment(Operand::Immediate(1)),
+					),
+					Instruction::Return(Operand::Temporary(0)),
+				],
+			},
+			Function {
+				id: 1,
+				instructions: vec![
+					Instruction::Expression(Operand::Temporary(0), RValue::FuncCall(0)),
+					Instruction::Return(Operand::Temporary(0)),
+				],
+			},
 		];
 		let (parsed, table) = parse(tokenize(test_program)).unwrap();
 		assert_eq!(tac_expected, generate(&parsed, table.0.len()));
