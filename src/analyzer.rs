@@ -22,12 +22,12 @@ pub fn analyze(program: &Program) -> Result<(), SemanticError> {
 	let mut defined_functions = HashSet::new();
 	for func in functions {
 		if !defined_functions.insert(func.name().table_index) {
-			return Err(SemanticError::FunctionRedeclaration(*func.name()));
+			return Err(SemanticError::FunctionRedeclaration(func.name()));
 		}
-		let mut stack = ScopeStack::default();
+		let mut stack = ScopeStack::new(func.parameter());
 		stack.scope_analyze(&func.scope(), false)?;
 		if let Some(&undefined_func) = stack
-			.function_calls()
+			.function_calls
 			.iter()
 			.find(|name| !defined_functions.contains(&name.table_index))
 		{
@@ -38,12 +38,29 @@ pub fn analyze(program: &Program) -> Result<(), SemanticError> {
 }
 
 type ScopeTable = Vec<usize>;
-#[derive(Debug, Default)]
-struct ScopeStack(Vec<ScopeTable>, Vec<FuncName>);
+#[derive(Debug)]
+struct ScopeStack {
+	scope_table: Vec<ScopeTable>,
+	pub function_calls: Vec<FuncName>,
+	parameter: Ident,
+}
 
 impl ScopeStack {
+	fn new(parameter: Ident) -> Self {
+		Self {
+			scope_table: Vec::new(),
+			function_calls: Vec::new(),
+			parameter,
+		}
+	}
 	fn find_ident(&self, ident: &Ident) -> Result<(), Ident> {
-		if self.0.iter().flatten().any(|i| *i == ident.table_index) {
+		if self
+			.scope_table
+			.iter()
+			.flatten()
+			.any(|i| *i == ident.table_index)
+			|| self.parameter.table_index == ident.table_index
+		{
 			Ok(())
 		} else {
 			Err(*ident)
@@ -57,8 +74,9 @@ impl ScopeStack {
 			}
 		};
 		match expr {
-			Expression::FuncCall(func_name) => {
-				self.1.push(*func_name);
+			Expression::FuncCall(func_name, direct_value) => {
+				find_direct_value(direct_value)?;
+				self.function_calls.push(*func_name);
 				Ok(())
 			}
 			Expression::DirectValue(d_value) => find_direct_value(d_value),
@@ -67,16 +85,15 @@ impl ScopeStack {
 			}
 		}
 	}
-	fn function_calls(&self) -> &[FuncName] {
-		&self.1
-	}
 	fn scope_analyze(&mut self, scope: &Scope, in_loop: bool) -> Result<(), SemanticError> {
-		self.0.push(ScopeTable::new());
+		self.scope_table.push(ScopeTable::new());
 		for stmt in scope.0.iter() {
 			match stmt {
 				Stmts::Decl(ident) => {
-					let current_table = self.0.last_mut().unwrap();
-					if current_table.contains(&ident.table_index) {
+					let current_table = self.scope_table.last_mut().unwrap();
+					if current_table.contains(&ident.table_index)
+						|| self.parameter.table_index == ident.table_index
+					{
 						return Err(SemanticError::MultipleDeclaration(*ident));
 					}
 					current_table.push(ident.table_index)
@@ -111,7 +128,7 @@ impl ScopeStack {
 				}
 			}
 		}
-		self.0.pop();
+		self.scope_table.pop();
 		Ok(())
 	}
 }

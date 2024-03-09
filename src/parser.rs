@@ -95,11 +95,11 @@ pub struct FuncName {
 #[derive(Clone, Debug)]
 pub struct Func(FuncName, Ident, Scope);
 impl Func {
-	pub fn name(&self) -> &FuncName {
-		&self.0
+	pub fn name(&self) -> FuncName {
+		self.0
 	}
-	pub fn parameter(&self) -> &Ident {
-		&self.1
+	pub fn parameter(&self) -> Ident {
+		self.1
 	}
 	pub fn scope(&self) -> &Scope {
 		&self.2
