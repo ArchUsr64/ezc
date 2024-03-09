@@ -4,7 +4,7 @@
 //! Grammar:
 //! ```c
 //! <Func>
-//! | int Ident() {<Stmts>*}
+//! | int Ident(int Ident) {<Stmts>*}
 //!
 //! <Stmts>
 //! | if (<Expression>) {<Stmts>*}
@@ -16,7 +16,7 @@
 //! | return <Expression>;
 //!
 //! <Expression>
-//! | Ident()
+//! | Ident(<DirectValue>)
 //! | <DirectValue>
 //! | <DirectValue> <BinaryOperation> <DirectValue>
 //!
@@ -32,6 +32,35 @@
 use std::iter::Peekable;
 
 use crate::lexer::{LexerOutput, Reserved, Symbol, SymbolTable, Token};
+
+/// Returns a parsed `Program` along with an identifier table on successful parse
+/// If not, returns the `Symbol` where parsing failed
+pub fn parse(lexer_output: LexerOutput) -> Result<(Program, IdentNameTable), Option<Symbol>> {
+	let LexerOutput {
+		symbol_table: SymbolTable {
+			identifier, consts, ..
+		},
+		symbol,
+	} = lexer_output;
+	let mut parser = Parser {
+		symbols: symbol.iter().copied().peekable(),
+		const_table: consts,
+	};
+	let mut functions = Vec::new();
+	while let Some(func) = parser.func() {
+		functions.push(func);
+	}
+	let res = Ok((Program(functions), IdentNameTable(identifier)));
+	if parser
+		.symbols
+		.next_if(|i| matches!(i, Symbol(Token::Eof, ..)))
+		.is_some()
+	{
+		res
+	} else {
+		Err(parser.symbols.next())
+	}
+}
 
 #[derive(Clone, Debug)]
 pub struct Program(pub Vec<Func>);
@@ -64,13 +93,16 @@ pub struct FuncName {
 
 /// Tuple struct of the function's name as `Ident` and the respective `Scope`
 #[derive(Clone, Debug)]
-pub struct Func(FuncName, Scope);
+pub struct Func(FuncName, Ident, Scope);
 impl Func {
-	pub fn scope(&self) -> &Scope {
-		&self.1
-	}
 	pub fn name(&self) -> &FuncName {
 		&self.0
+	}
+	pub fn parameter(&self) -> &Ident {
+		&self.1
+	}
+	pub fn scope(&self) -> &Scope {
+		&self.2
 	}
 }
 
@@ -87,7 +119,7 @@ pub enum Stmts {
 
 #[derive(Clone, Copy, Debug)]
 pub enum Expression {
-	FuncCall(FuncName),
+	FuncCall(FuncName, DirectValue),
 	DirectValue(DirectValue),
 	BinaryExpression(DirectValue, BinaryOperation, DirectValue),
 }
@@ -138,35 +170,6 @@ impl BinaryOperation {
 	}
 }
 
-/// Returns a parsed `Program` along with an identifier table on successful parse
-/// If not, returns the `Symbol` where parsing failed
-pub fn parse(lexer_output: LexerOutput) -> Result<(Program, IdentNameTable), Option<Symbol>> {
-	let LexerOutput {
-		symbol_table: SymbolTable {
-			identifier, consts, ..
-		},
-		symbol,
-	} = lexer_output;
-	let mut parser = Parser {
-		symbols: symbol.iter().copied().peekable(),
-		const_table: consts,
-	};
-	let mut functions = Vec::new();
-	while let Some(func) = parser.func() {
-		functions.push(func);
-	}
-	let res = Ok((Program(functions), IdentNameTable(identifier)));
-	if parser
-		.symbols
-		.next_if(|i| matches!(i, Symbol(Token::Eof, ..)))
-		.is_some()
-	{
-		res
-	} else {
-		Err(parser.symbols.next())
-	}
-}
-
 /// Manages the state of the input `Symbol` stream during parsing
 struct Parser<I: Iterator<Item = Symbol>> {
 	symbols: Peekable<I>,
@@ -196,6 +199,8 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 		if self.next_if_eq(Token::Keyword(Reserved::Int))
 			&& let Some(id) = self.ident()
 			&& self.next_if_eq(Token::LeftParenthesis)
+			&& self.next_if_eq(Token::Keyword(Reserved::Int))
+			&& let Some(parameter) = self.ident()
 			&& self.next_if_eq(Token::RightParenthesis)
 			&& self.next_if_eq(Token::LeftBrace)
 		{
@@ -203,7 +208,7 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 				scope.push(stmt);
 			}
 			if self.next_if_eq(Token::RightBrace) {
-				Some(Func(id.as_func_name(), Scope(scope)))
+				Some(Func(id.as_func_name(), parameter, Scope(scope)))
 			} else {
 				None
 			}
@@ -269,8 +274,10 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 		let l_value = self.direct_value()?;
 		if let DirectValue::Ident(ident) = l_value {
 			if self.next_if_eq(Token::LeftParenthesis) {
-				if self.next_if_eq(Token::RightParenthesis) {
-					return Some(Expression::FuncCall(ident.as_func_name()));
+				if let Some(argument) = self.direct_value()
+					&& self.next_if_eq(Token::RightParenthesis)
+				{
+					return Some(Expression::FuncCall(ident.as_func_name(), argument));
 				} else {
 					return None;
 				}
