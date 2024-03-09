@@ -50,17 +50,17 @@ impl ScopeStack {
 		}
 	}
 	fn expression_valid(&mut self, expr: &Expression) -> Result<(), Ident> {
-		let mut find_direct_value = |direct_value: &DirectValue| -> Result<(), Ident> {
+		let find_direct_value = |direct_value: &DirectValue| -> Result<(), Ident> {
 			match direct_value {
 				DirectValue::Ident(i) => self.find_ident(i),
-				DirectValue::FuncCall(i) => {
-					self.1.push(*i);
-					Ok(())
-				}
 				DirectValue::Const(_) => Ok(()),
 			}
 		};
 		match expr {
+			Expression::FuncCall(func_name) => {
+				self.1.push(*func_name);
+				Ok(())
+			}
 			Expression::DirectValue(d_value) => find_direct_value(d_value),
 			Expression::BinaryExpression(l_value, _, r_value) => {
 				find_direct_value(l_value).and_then(|_| find_direct_value(r_value))

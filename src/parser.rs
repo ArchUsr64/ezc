@@ -16,11 +16,11 @@
 //! | return <Expression>;
 //!
 //! <Expression>
+//! | Ident()
 //! | <DirectValue>
 //! | <DirectValue> <BinaryOperation> <DirectValue>
 //!
 //! <DirectValue>
-//! | Ident()
 //! | Ident
 //! | Const
 //!
@@ -64,7 +64,7 @@ pub struct FuncName {
 
 /// Tuple struct of the function's name as `Ident` and the respective `Scope`
 #[derive(Clone, Debug)]
-pub struct Func(FuncName, pub Scope);
+pub struct Func(FuncName, Scope);
 impl Func {
 	pub fn scope(&self) -> &Scope {
 		&self.1
@@ -87,13 +87,13 @@ pub enum Stmts {
 
 #[derive(Clone, Copy, Debug)]
 pub enum Expression {
+	FuncCall(FuncName),
 	DirectValue(DirectValue),
 	BinaryExpression(DirectValue, BinaryOperation, DirectValue),
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum DirectValue {
-	FuncCall(FuncName),
 	Ident(Ident),
 	Const(i32),
 }
@@ -267,6 +267,15 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 	}
 	fn expression(&mut self) -> Option<Expression> {
 		let l_value = self.direct_value()?;
+		if let DirectValue::Ident(ident) = l_value {
+			if self.next_if_eq(Token::LeftParenthesis) {
+				if self.next_if_eq(Token::RightParenthesis) {
+					return Some(Expression::FuncCall(ident.as_func_name()));
+				} else {
+					return None;
+				}
+			}
+		}
 		if let Some(binary_operation) = self.binary_operation() {
 			Some(Expression::BinaryExpression(
 				l_value,
@@ -279,15 +288,7 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 	}
 	fn direct_value(&mut self) -> Option<DirectValue> {
 		if let Some(val) = self.ident() {
-			if self.next_if_eq(Token::LeftParenthesis) {
-				if self.next_if_eq(Token::RightParenthesis) {
-					Some(DirectValue::FuncCall(val.as_func_name()))
-				} else {
-					None
-				}
-			} else {
-				Some(DirectValue::Ident(val))
-			}
+			Some(DirectValue::Ident(val))
 		} else {
 			let sign = if self.next_if_eq(Token::Minus) { -1 } else { 1 };
 			match self.next_if(|i| matches!(i, Token::Const(_))) {
