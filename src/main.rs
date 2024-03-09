@@ -11,8 +11,8 @@ fn main() {
 	let lexer_output = lexer::tokenize(include_str!("test.c"));
 	log::debug!("Tokens: {:#?}", lexer_output);
 	let (parsed, ident_table) = parser::parse(lexer_output.clone()).unwrap();
-	println!("Parse Tree: {parsed:#?}");
-	println!("Ident Table: {ident_table:#?}");
+	log::debug!("Parse Tree: {parsed:#?}");
+	log::debug!("Ident Table: {ident_table:#?}");
 	if let Err(kind) = analyzer::analyze(&parsed) {
 		use analyzer::SemanticError;
 		match kind {
@@ -30,7 +30,7 @@ fn main() {
 		}
 	}
 	let tac_instructions = tac_gen::generate(&parsed, ident_table.0.len());
-	println!("Code Gen: {tac_instructions:#?}");
+	log::debug!("Code Gen: {tac_instructions:#?}");
 	let x86_asm = x86_gen::x86_gen(tac_instructions, ident_table);
 	log::debug!("x86 Assembly: {x86_asm}");
 	std::fs::write("ezc.asm", x86_asm).unwrap();

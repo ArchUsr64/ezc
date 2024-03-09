@@ -13,7 +13,7 @@ main.o: main.c
 ezc.o: ezc.asm
 	as ezc.asm -o ezc.o
 
-ezc.asm: src/* Cargo.toml
+ezc.asm: src/* Cargo.toml src/test.c
 	cargo run
 
 clean:

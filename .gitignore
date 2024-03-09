@@ -1,6 +1,5 @@
 /target
-out.asm
+*.asm
 *.out
 *.o
-temp*
 core.*
