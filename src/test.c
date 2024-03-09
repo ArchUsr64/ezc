@@ -1,13 +1,16 @@
 // Compute the nth fibonnaci number
-int start(int n) {
+int fibb(int n) {
 	if (n < 2) {
-		return n;
+		return n + 1;
 	}
 	int n_minus_1;
 	int n_minus_2;
 	n = n - 1;
-	n_minus_1 = start(n);
-	n = n - 2;
-	n_minus_2 = start(n);
+	n_minus_1 = fibb(n);
+	n = n - 1;
+	n_minus_2 = fibb(n);
 	return  n_minus_1 + n_minus_2;
+}
+int start(int a) {
+	return fibb(43);
 }

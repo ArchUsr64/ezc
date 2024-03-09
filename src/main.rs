@@ -4,7 +4,7 @@ mod analyzer;
 mod lexer;
 mod parser;
 mod tac_gen;
-// mod x86_gen;
+mod x86_gen;
 
 fn main() {
 	env_logger::init();
@@ -31,7 +31,7 @@ fn main() {
 	}
 	let tac_instructions = tac_gen::generate(&parsed, ident_table.0.len());
 	println!("Code Gen: {tac_instructions:#?}");
-	// let x86_asm = x86_gen::x86_gen(tac_instructions, ident_table);
-	// log::debug!("x86 Assembly: {x86_asm}");
-	// std::fs::write("ezc.asm", x86_asm).unwrap();
+	let x86_asm = x86_gen::x86_gen(tac_instructions, ident_table);
+	log::debug!("x86 Assembly: {x86_asm}");
+	std::fs::write("ezc.asm", x86_asm).unwrap();
 }

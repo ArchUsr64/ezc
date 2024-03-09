@@ -3,11 +3,10 @@ use std::collections::HashMap;
 
 use crate::{
 	parser::{self, BinaryOperation},
-	tac_gen::{self, BindedIdent, Operand, RValue},
+	tac_gen::{self, Ident, Operand, RValue},
 };
 
-const PRELUDE: &str = r"
-.intel_mnemonic
+const PRELUDE: &str = r".intel_mnemonic
 .intel_syntax
 .text
 ";
@@ -45,7 +44,7 @@ F{func_id}:
 		// Stores the list of instructions
 		let mut if_jumps = Vec::new();
 		let mut goto_jumps = Vec::new();
-		let mut allocator = StackAllocator::new();
+		let mut allocator = StackAllocator::default();
 		use tac_gen::Instruction;
 		for (i, instruction) in instructions.iter().enumerate() {
 			match instruction {
@@ -70,6 +69,10 @@ F{func_id}:
 					Instruction::Return(op) => vec![
 						format!("mov %eax, {}", allocator.parse_operand(*op)),
 						format!("jmp END_{func_id}"),
+					],
+					Instruction::Push(op) => vec![
+						format!("mov %eax, {}", allocator.parse_operand(*op)),
+						format!("mov DWORD PTR [%rsp], %eax"),
 					],
 					Instruction::Expression(op, r_value) => allocator.expression_gen(*op, *r_value),
 					Instruction::Ifz(op, _) => {
@@ -133,25 +136,22 @@ F{func_id}:
 	res
 }
 
-#[derive(Debug)]
+const INTEGER_SIZE: usize = 4;
+
+#[derive(Debug, Default)]
 struct StackAllocator {
 	stack_usage: usize,
-	ident_table: HashMap<BindedIdent, usize>,
+	ident_table: HashMap<Ident, usize>,
+	arguments_size: usize,
 	temporary_var_table: HashMap<usize, usize>,
 }
 impl StackAllocator {
-	fn new() -> Self {
-		Self {
-			stack_usage: 0,
-			ident_table: HashMap::new(),
-			temporary_var_table: HashMap::new(),
-		}
-	}
 	fn parse_operand(&mut self, operand: Operand) -> String {
 		match operand {
+			Operand::Ident(Ident::Parameter) => format!("DWORD PTR [%rbp + 16]"),
 			Operand::Ident(ident) => {
 				let offset = *self.ident_table.get(&ident).unwrap_or_else(|| {
-					self.stack_usage += 4;
+					self.stack_usage += INTEGER_SIZE;
 					&self.stack_usage
 				});
 				self.ident_table.insert(ident, offset);
@@ -159,7 +159,7 @@ impl StackAllocator {
 			}
 			Operand::Temporary(index) => {
 				let offset = *self.temporary_var_table.get(&index).unwrap_or_else(|| {
-					self.stack_usage += 4;
+					self.stack_usage += INTEGER_SIZE;
 					&self.stack_usage
 				});
 				self.temporary_var_table.insert(index, offset);
@@ -177,10 +177,13 @@ impl StackAllocator {
 				format!("mov %eax, {}", self.parse_operand(r_value)),
 				format!("mov {}, %eax", self.parse_operand(l_value)),
 			],
-			RValue::FuncCall(func_id) => vec![
-				format!("call F{func_id}"),
-				format!("mov {}, %eax", self.parse_operand(l_value)),
-			],
+			RValue::FuncCall(func_id) => {
+				self.arguments_size = 0;
+				vec![
+					format!("call F{func_id}"),
+					format!("mov {}, %eax", self.parse_operand(l_value)),
+				]
+			}
 			RValue::Operation(lhs, operation, rhs) => {
 				enum Operation {
 					Arithmetic(&'static str),
