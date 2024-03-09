@@ -1,28 +1,24 @@
-a.out: main.o asm.o
-	gcc main.o asm.o
+test: gcc.out ezc.out
+	@echo "GCC output:"
+	-@./gcc.out
+	@echo "EZC output:"
+	@./ezc.out
+
+ezc.out: main.o ezc.o
+	gcc main.o ezc.o -o ezc.out
 
 main.o: main.c
 	gcc -c main.c
 
-asm.o: out.asm
-	as out.asm -o asm.o
+ezc.o: ezc.asm
+	as ezc.asm -o ezc.o
 
-out.asm: src/* Cargo.toml
+ezc.asm: src/* Cargo.toml
 	cargo run
 
 clean:
-	rm out.asm *.o a.out temp.c gcc.out
+	rm ezc.asm *.o *.out
 
-gcc:
-	@echo "#include <stdio.h>" > temp.c
-	@echo "int test_func() {" >> temp.c
-	@cat src/test.c >> temp.c
-	@echo "}" >> temp.c
-	@echo 'int main() { printf("%d\n", test_func()); }' >> temp.c
-	gcc temp.c -o gcc.out
-
-test: gcc a.out
-	@echo "GCC output:"
-	@./gcc.out
-	@echo "My output:"
-	@./a.out
+gcc.out: src/test.c main.o
+	gcc -c src/test.c
+	gcc main.o test.o -o gcc.out

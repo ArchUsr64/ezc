@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 
 use crate::{
-	parser::BinaryOperation,
+	parser::{self, BinaryOperation},
 	tac_gen::{self, BindedIdent, Operand, RValue},
 };
 
@@ -10,107 +10,126 @@ const PRELUDE: &str = r"
 .intel_mnemonic
 .intel_syntax
 .text
-.global test_func
-.type test_func, @function
-
-test_func:
 ";
 
-const PROLOGUE: &str = r"
+pub fn x86_gen(
+	tac_instruction: Vec<tac_gen::Function>,
+	ident_table: parser::IdentNameTable,
+) -> String {
+	let mut res = PRELUDE.to_string();
+
+	res += tac_instruction
+		.iter()
+		.map(|func| ident_table.0[func.id].as_str())
+		.map(|func_name| format!("\n.global {func_name}\n.type {func_name}, @function"))
+		.collect::<String>()
+		.as_str();
+
+	for tac_gen::Function {
+		id: func_id,
+		instructions,
+	} in tac_instruction.iter()
+	{
+		let func_name = ident_table.0[*func_id].as_str();
+		res += format!(
+			r"
+{func_name}:
+F{func_id}:
 	push %rbp
 	mov %rbp, %rsp
-	xor %eax, %eax
-";
-
-const EPILOGUE: &str = r"
-	END:
-	pop %rbp
-	ret
-";
-
-pub fn x86_gen(tac_instruction: Vec<tac_gen::Instruction>) -> String {
-	let mut res = PRELUDE.to_string();
-	let mut if_count = 0;
-	let mut goto_count = 0;
-	// Stores the list of instructions
-	let mut if_jumps = Vec::new();
-	let mut goto_jumps = Vec::new();
-	res.push_str(PROLOGUE);
-	let mut allocator = StackAllocator::new();
-	use tac_gen::Instruction;
-	for (i, instruction) in tac_instruction.iter().enumerate() {
-		match instruction {
-			Instruction::Goto(offset) => {
-				goto_jumps.push(i as isize + *offset);
-			}
-			Instruction::Ifz(_, offset) => {
-				if_jumps.push(i + *offset);
-			}
-			_ => continue,
-		}
-	}
-	let mut asm_instructions: Vec<Vec<String>> = tac_instruction
-		.iter()
-		.enumerate()
-		.map(|(i, tac)| {
-			let mut asm = Vec::new();
-			if log::log_enabled!(log::Level::Debug) {
-				asm.push(format!("\n# {i}: {tac:?}"));
-			}
-			asm.append(&mut match tac {
-				Instruction::Return(op) => vec![
-					format!("mov %eax, {}", allocator.parse_operand(*op)),
-					format!("jmp END"),
-				],
-				Instruction::Expression(op, r_value) => allocator.expression_gen(*op, *r_value),
-				Instruction::Ifz(op, _) => {
-					if_count += 1;
-					vec![
-						format!("cmp {}, 0", allocator.parse_operand(*op)),
-						format!("je L{}", if_count - 1),
-					]
+"
+		)
+		.as_str();
+		let mut if_count = 0;
+		let mut goto_count = 0;
+		// Stores the list of instructions
+		let mut if_jumps = Vec::new();
+		let mut goto_jumps = Vec::new();
+		let mut allocator = StackAllocator::new();
+		use tac_gen::Instruction;
+		for (i, instruction) in instructions.iter().enumerate() {
+			match instruction {
+				Instruction::Goto(offset) => {
+					goto_jumps.push(i as isize + *offset);
 				}
-				Instruction::Goto(_) => {
-					goto_count += 1;
-					vec![format!("jmp G{}", goto_count - 1)]
+				Instruction::Ifz(_, offset) => {
+					if_jumps.push(i + *offset);
+				}
+				_ => continue,
+			}
+		}
+		let mut asm_instructions: Vec<Vec<String>> = instructions
+			.iter()
+			.enumerate()
+			.map(|(i, tac)| {
+				let mut asm = Vec::new();
+				if log::log_enabled!(log::Level::Debug) {
+					asm.push(format!("\n# {i}: {tac:?}"));
+				}
+				asm.append(&mut match tac {
+					Instruction::Return(op) => vec![
+						format!("mov %eax, {}", allocator.parse_operand(*op)),
+						format!("jmp END_{func_id}"),
+					],
+					Instruction::Expression(op, r_value) => allocator.expression_gen(*op, *r_value),
+					Instruction::Ifz(op, _) => {
+						if_count += 1;
+						vec![
+							format!("cmp {}, 0", allocator.parse_operand(*op)),
+							format!("je L{}_{func_id}", if_count - 1),
+						]
+					}
+					Instruction::Goto(_) => {
+						goto_count += 1;
+						vec![format!("jmp G{}_{func_id}", goto_count - 1)]
+					}
+				});
+				asm
+			})
+			.collect();
+		if_jumps
+			.iter()
+			.enumerate()
+			.for_each(|(label_id, &tac_index)| {
+				if let Some(asm) = asm_instructions.get_mut(tac_index) {
+					asm.insert(0, format!("L{label_id}_{func_id}:"));
+				} else if let Some(last) = asm_instructions.last_mut() {
+					last.push(format!("L{label_id}_{func_id}:"));
 				}
 			});
-			asm
-		})
-		.collect();
-	if_jumps
-		.iter()
-		.enumerate()
-		.for_each(|(label_id, &tac_index)| {
-			if let Some(asm) = asm_instructions.get_mut(tac_index) {
-				asm.insert(0, format!("L{label_id}:"));
-			} else if let Some(last) = asm_instructions.last_mut() {
-				last.push(format!("L{label_id}:"));
-			}
-		});
-	goto_jumps
-		.iter()
-		.enumerate()
-		.for_each(|(label_id, &tac_index)| {
-			let tac_index = tac_index as usize;
-			if let Some(asm) = asm_instructions.get_mut(tac_index) {
-				asm.insert(0, format!("G{label_id}:"));
-			} else if let Some(last) = asm_instructions.last_mut() {
-				last.push(format!("G{label_id}:"));
-			};
-		});
-	res.push_str(
-		asm_instructions
+		goto_jumps
 			.iter()
-			.flat_map(|asm_set| {
-				asm_set
-					.iter()
-					.map(|instruction| format!("\t{instruction}\n"))
-			})
-			.collect::<String>()
-			.as_str(),
-	);
-	res.push_str(EPILOGUE);
+			.enumerate()
+			.for_each(|(label_id, &tac_index)| {
+				let tac_index = tac_index as usize;
+				if let Some(asm) = asm_instructions.get_mut(tac_index) {
+					asm.insert(0, format!("G{label_id}_{func_id}:"));
+				} else if let Some(last) = asm_instructions.last_mut() {
+					last.push(format!("G{label_id}_{func_id}:"));
+				};
+			});
+		res += format!("	sub %rsp, {}\n", allocator.stack_usage).as_str();
+		res.push_str(
+			asm_instructions
+				.iter()
+				.flat_map(|asm_set| {
+					asm_set
+						.iter()
+						.map(|instruction| format!("\t{instruction}\n"))
+				})
+				.collect::<String>()
+				.as_str(),
+		);
+		res += format!(
+			r"END_{func_id}:
+	add %rsp, {}
+	pop %rbp
+	ret
+",
+			allocator.stack_usage
+		)
+		.as_str();
+	}
 	res
 }
 
@@ -156,6 +175,10 @@ impl StackAllocator {
 			}
 			RValue::Assignment(r_value) => vec![
 				format!("mov %eax, {}", self.parse_operand(r_value)),
+				format!("mov {}, %eax", self.parse_operand(l_value)),
+			],
+			RValue::FuncCall(func_id) => vec![
+				format!("call F{func_id}"),
 				format!("mov {}, %eax", self.parse_operand(l_value)),
 			],
 			RValue::Operation(lhs, operation, rhs) => {

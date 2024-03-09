@@ -1,7 +1,7 @@
 #include <stdio.h>
 
-extern int test_func(void);
+extern int start(void);
 
 int main() {
-	printf("%d\n", test_func());
+	printf("%d\n", start());
 }

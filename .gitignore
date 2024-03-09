@@ -3,3 +3,4 @@ out.asm
 *.out
 *.o
 temp*
+core.*
