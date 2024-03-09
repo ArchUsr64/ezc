@@ -134,7 +134,8 @@ impl TACGen {
 					if_block.append(&mut sub_scope);
 					if_block
 				}
-				_ => todo!(),
+				Stmts::Break => todo!(),
+				Stmts::Continue => todo!(),
 			};
 			instructions.append(&mut generated_instructions);
 		}

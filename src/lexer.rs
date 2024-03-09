@@ -297,7 +297,7 @@ pub fn tokenize(input_stream: &str) -> LexerOutput {
 			')' => Token::RightParenthesis,
 			'{' => Token::LeftBrace,
 			'}' => Token::RightBrace,
-			x => todo!("{x} at line#{line_number}"),
+			x => panic!("{x} at line#{line_number}"),
 		};
 		symbol.push(Symbol(matched_token, line_number));
 	}
