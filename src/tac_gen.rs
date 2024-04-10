@@ -103,6 +103,8 @@ impl TACGen {
 		res
 	}
 	fn generate_scope(&mut self, scope: &parser::Scope) -> Vec<Instruction> {
+		const PENDING_BREAK: isize = isize::MAX;
+		const PENDING_CONTINUE: isize = isize::MIN;
 		let mut instructions = Vec::new();
 		for stmt in scope.0.iter() {
 			use parser::{Ident, Stmts};
@@ -117,15 +119,33 @@ impl TACGen {
 				Stmts::While(expr, scope) => {
 					self.scope_id += 1;
 					let mut sub_scope = self.generate_scope(scope);
+					let scope_len = sub_scope.len();
+					sub_scope
+						.iter_mut()
+						.enumerate()
+						.filter_map(|(i, inst)| {
+							if let Instruction::Goto(offset) = inst {
+								Some((i, offset))
+							} else {
+								None
+							}
+						})
+						.for_each(|(i, offset)| {
+							if *offset == PENDING_BREAK {
+								*offset = (scope_len - i) as isize + 1;
+							} else if *offset == PENDING_CONTINUE {
+								*offset = -(i as isize);
+							}
+						});
 					let mut while_block =
 						self.generate_assignment(Operand::Temporary(self.temp_count), expr);
 					while_block.push(Instruction::Ifz(
 						Operand::Temporary(self.temp_count),
 						sub_scope.len() + 2,
 					));
-					let scope_len = sub_scope.len();
+					let loop_back_instruction = Instruction::Goto(-(sub_scope.len() as isize) - 2);
 					while_block.append(&mut sub_scope);
-					while_block.push(Instruction::Goto(-(scope_len as isize) - 2));
+					while_block.push(loop_back_instruction);
 					while_block
 				}
 				Stmts::Return(expr) => {
@@ -146,8 +166,8 @@ impl TACGen {
 					if_block.append(&mut sub_scope);
 					if_block
 				}
-				Stmts::Break => todo!(),
-				Stmts::Continue => todo!(),
+				Stmts::Break => vec![Instruction::Goto(PENDING_BREAK)],
+				Stmts::Continue => vec![Instruction::Goto(PENDING_CONTINUE)],
 			};
 			instructions.append(&mut generated_instructions);
 		}
