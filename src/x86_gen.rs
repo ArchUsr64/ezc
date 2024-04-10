@@ -11,6 +11,10 @@ const PRELUDE: &str = r".intel_mnemonic
 .text
 ";
 
+/// stack offset to access arguments, comprises of 8 bytes for the return address
+/// of the caller and 8 bytes for caller's `rbp`
+const ARGUMENTS_STACK_OFFSET: usize = 16;
+
 pub fn x86_gen(
 	tac_instruction: Vec<tac_gen::Function>,
 	ident_table: parser::IdentNameTable,
@@ -72,6 +76,7 @@ F{func_id}:
 					],
 					Instruction::Push(op) => vec![
 						format!("mov %eax, {}", allocator.parse_operand(*op)),
+						format!("sub %rsp, {}", INTEGER_SIZE),
 						format!("mov DWORD PTR [%rsp], %eax"),
 					],
 					Instruction::Expression(op, r_value) => allocator.expression_gen(*op, *r_value),
@@ -148,7 +153,12 @@ struct StackAllocator {
 impl StackAllocator {
 	fn parse_operand(&mut self, operand: Operand) -> String {
 		match operand {
-			Operand::Ident(Ident::Parameter) => format!("DWORD PTR [%rbp + 16]"),
+			Operand::Ident(Ident::Parameter(offset)) => {
+				format!(
+					"DWORD PTR [%rbp + {}]",
+					ARGUMENTS_STACK_OFFSET + offset * INTEGER_SIZE
+				)
+			}
 			Operand::Ident(ident) => {
 				let offset = *self.ident_table.get(&ident).unwrap_or_else(|| {
 					self.stack_usage += INTEGER_SIZE;
@@ -177,11 +187,12 @@ impl StackAllocator {
 				format!("mov %eax, {}", self.parse_operand(r_value)),
 				format!("mov {}, %eax", self.parse_operand(l_value)),
 			],
-			RValue::FuncCall(func_id) => {
+			RValue::FuncCall(func_id, arg_count) => {
 				self.arguments_size = 0;
 				vec![
 					format!("call F{func_id}"),
 					format!("mov {}, %eax", self.parse_operand(l_value)),
+					format!("add %rsp, {}", arg_count * INTEGER_SIZE),
 				]
 			}
 			RValue::Operation(lhs, operation, rhs) => {

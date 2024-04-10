@@ -3,9 +3,10 @@ use crate::parser::{self, Program};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Ident {
-	/// Tuple struct with `name_index` as the first element and `scope_id` as the next
+	/// Tuple struct with `name_index` and `scope_id`
 	Binded(usize, usize),
-	Parameter,
+	/// Tuple struct with the index into the parameters vec
+	Parameter(usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,7 +18,8 @@ pub enum Operand {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RValue {
-	FuncCall(usize),
+	/// Tuple struct with `name_index` into the symbol table and the number of arguments
+	FuncCall(usize, usize),
 	Assignment(Operand),
 	Operation(Operand, parser::BinaryOperation, Operand),
 }
@@ -46,7 +48,7 @@ pub fn generate(program: &Program, ident_count: usize) -> Vec<Function> {
 		.0
 		.iter()
 		.map(|function| {
-			let mut generator = TACGen::new(ident_count, function.parameter().table_index);
+			let mut generator = TACGen::new(ident_count, function.parameter_table_idx());
 			Function {
 				id: function.name().table_index,
 				instructions: generator.generate_scope(function.scope()),
@@ -56,26 +58,31 @@ pub fn generate(program: &Program, ident_count: usize) -> Vec<Function> {
 }
 
 struct TACGen {
+	parameters: Vec<usize>,
 	scope_id: usize,
 	scope_map: Vec<Vec<usize>>,
-	parameter: usize,
 }
 impl TACGen {
-	fn new(ident_count: usize, parameter_index: usize) -> Self {
+	fn new(ident_count: usize, parameters: Vec<usize>) -> Self {
 		Self {
+			parameters,
 			scope_id: 0,
 			// TODO: Has rustc automatically pre-allocated required memory or
 			// is the vector being resized
 			scope_map: (0..ident_count).map(|_| Vec::new()).collect(),
-			parameter: parameter_index,
 		}
 	}
 	fn generate_ident(&self, ident: &parser::Ident) -> Ident {
 		let name_index = ident.table_index;
-		if name_index == self.parameter {
-			Ident::Parameter
+		if let Some(scope_id) = self.scope_map[name_index].last() {
+			Ident::Binded(name_index, *scope_id)
 		} else {
-			Ident::Binded(name_index, *self.scope_map[name_index].last().unwrap())
+			Ident::Parameter(
+				self.parameters
+					.iter()
+					.position(|&i| i == name_index)
+					.unwrap(),
+			)
 		}
 	}
 	fn generate_assignment(&mut self, lhs: Operand, rhs: &parser::Expression) -> Vec<Instruction> {
@@ -89,8 +96,10 @@ impl TACGen {
 		let mut res = Vec::new();
 		let r_value = match rhs {
 			Expression::FuncCall(func, argument) => {
-				res.push(Instruction::Push(to_operand(argument)));
-				RValue::FuncCall(func.table_index)
+				for direct_value in argument.iter().rev() {
+					res.push(Instruction::Push(to_operand(direct_value)));
+				}
+				RValue::FuncCall(func.table_index, argument.len())
 			}
 			Expression::DirectValue(r_value) => RValue::Assignment(to_operand(r_value)),
 			Expression::BinaryExpression(l_value, op, r_value) => {
@@ -371,7 +380,7 @@ mod test {
 				id: 2,
 				instructions: vec![
 					Instruction::Push(Operand::Immediate(1)),
-					Instruction::Expression(Operand::Temporary, RValue::FuncCall(0)),
+					Instruction::Expression(Operand::Temporary, RValue::FuncCall(0, 1)),
 					Instruction::Return(Operand::Temporary),
 				],
 			},

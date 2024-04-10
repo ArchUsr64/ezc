@@ -1,7 +1,7 @@
 #include <stdio.h>
 
-extern int start(int);
+extern int start();
 
 int main() {
-	printf("%d\n", start(0));
+	printf("%d\n", start());
 }

@@ -4,7 +4,11 @@
 //! Grammar:
 //! ```c
 //! <Func>
-//! | int Ident(int Ident) {<Stmts>*}
+//! | int Ident(<Parmeter>*) {<Stmts>*}
+//!
+//! <Parameters>
+//! | int Ident
+//! | int Ident, <Parameter>
 //!
 //! <Stmts>
 //! | if (<Expression>) {<Stmts>*}
@@ -16,9 +20,13 @@
 //! | return <Expression>;
 //!
 //! <Expression>
-//! | Ident(<DirectValue>)
+//! | Ident(<Arguments>)
 //! | <DirectValue>
 //! | <DirectValue> <BinaryOperation> <DirectValue>
+//!
+//! <Arguments>
+//! | <DirectValue>
+//! | <DirectValue>, <Arguments>
 //!
 //! <DirectValue>
 //! | Ident
@@ -77,34 +85,52 @@ pub struct Ident {
 	pub table_index: usize,
 }
 impl Ident {
-	fn as_func_name(&self) -> FuncName {
-		FuncName {
+	fn as_func_name(&self, parameter_count: usize) -> FuncSignature {
+		FuncSignature {
 			line_number: self.line_number,
 			table_index: self.table_index,
+			parameter_count,
 		}
 	}
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct FuncName {
+pub struct FuncSignature {
 	line_number: usize,
 	pub table_index: usize,
+	pub parameter_count: usize,
 }
 
 /// Tuple struct of the function's name as `Ident` and the respective `Scope`
 #[derive(Clone, Debug)]
-pub struct Func(FuncName, Ident, Scope);
+pub struct Func(FuncSignature, Parameters, Scope);
 impl Func {
-	pub fn name(&self) -> FuncName {
+	fn new(name: Ident, parameters: Parameters, scope: Scope) -> Self {
+		Self(
+			FuncSignature {
+				line_number: name.line_number,
+				table_index: name.table_index,
+				parameter_count: parameters.len(),
+			},
+			parameters,
+			scope,
+		)
+	}
+	pub fn name(&self) -> FuncSignature {
 		self.0
 	}
-	pub fn parameter(&self) -> Ident {
-		self.1
+	pub fn parameter(&self) -> &Parameters {
+		&self.1
+	}
+	pub fn parameter_table_idx(&self) -> Vec<usize> {
+		self.parameter().iter().map(|i| i.table_index).collect()
 	}
 	pub fn scope(&self) -> &Scope {
 		&self.2
 	}
 }
+
+pub type Parameters = Vec<Ident>;
 
 #[derive(Clone, Debug)]
 pub enum Stmts {
@@ -117,12 +143,14 @@ pub enum Stmts {
 	Return(Expression),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Expression {
-	FuncCall(FuncName, DirectValue),
+	FuncCall(FuncSignature, Arguments),
 	DirectValue(DirectValue),
 	BinaryExpression(DirectValue, BinaryOperation, DirectValue),
 }
+
+type Arguments = Vec<DirectValue>;
 
 #[derive(Clone, Copy, Debug)]
 pub enum DirectValue {
@@ -171,11 +199,12 @@ impl BinaryOperation {
 }
 
 /// Manages the state of the input `Symbol` stream during parsing
-struct Parser<I: Iterator<Item = Symbol>> {
+#[derive(Debug)]
+struct Parser<I: Iterator<Item = Symbol> + std::fmt::Debug> {
 	symbols: Peekable<I>,
 	const_table: Vec<String>,
 }
-impl<I: Iterator<Item = Symbol>> Parser<I> {
+impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 	fn next_if_eq(&mut self, needle: Token) -> bool {
 		self.symbols.next_if(|&i| i.token() == needle).is_some()
 	}
@@ -199,8 +228,7 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 		if self.next_if_eq(Token::Keyword(Reserved::Int))
 			&& let Some(id) = self.ident()
 			&& self.next_if_eq(Token::LeftParenthesis)
-			&& self.next_if_eq(Token::Keyword(Reserved::Int))
-			&& let Some(parameter) = self.ident()
+			&& let Some(parameter) = self.parameters()
 			&& self.next_if_eq(Token::RightParenthesis)
 			&& self.next_if_eq(Token::LeftBrace)
 		{
@@ -208,13 +236,49 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 				scope.push(stmt);
 			}
 			if self.next_if_eq(Token::RightBrace) {
-				Some(Func(id.as_func_name(), parameter, Scope(scope)))
+				Some(Func::new(id, parameter, Scope(scope)))
 			} else {
 				None
 			}
 		} else {
 			None
 		}
+	}
+	fn parameters(&mut self) -> Option<Parameters> {
+		let mut res = Vec::new();
+		while !matches!(
+			self.symbols.peek().map(|i| i.token()),
+			Some(Token::RightParenthesis)
+		) {
+			if !res.is_empty() && !self.next_if_eq(Token::Comma) {
+				return None;
+			}
+			if self.next_if_eq(Token::Keyword(Reserved::Int))
+				&& let Some(ident) = self.ident()
+			{
+				res.push(ident);
+			} else {
+				return None;
+			}
+		}
+		Some(res)
+	}
+	fn arguments(&mut self) -> Option<Arguments> {
+		let mut res = Vec::new();
+		while !matches!(
+			self.symbols.peek().map(|i| i.token()),
+			Some(Token::RightParenthesis)
+		) {
+			if !res.is_empty() && !self.next_if_eq(Token::Comma) {
+				return None;
+			}
+			if let Some(direct_val) = self.direct_value() {
+				res.push(direct_val);
+			} else {
+				return None;
+			}
+		}
+		Some(res)
 	}
 	fn stmts(&mut self) -> Option<Stmts> {
 		if self.next_if_eq(Token::Keyword(Reserved::If)) && self.next_if_eq(Token::LeftParenthesis)
@@ -274,10 +338,13 @@ impl<I: Iterator<Item = Symbol>> Parser<I> {
 		let l_value = self.direct_value()?;
 		if let DirectValue::Ident(ident) = l_value {
 			if self.next_if_eq(Token::LeftParenthesis) {
-				if let Some(argument) = self.direct_value()
+				if let Some(arguments) = self.arguments()
 					&& self.next_if_eq(Token::RightParenthesis)
 				{
-					return Some(Expression::FuncCall(ident.as_func_name(), argument));
+					return Some(Expression::FuncCall(
+						ident.as_func_name(arguments.len()),
+						arguments,
+					));
 				} else {
 					return None;
 				}

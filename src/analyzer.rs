@@ -3,35 +3,44 @@
 //! Takes a reference to `parser::Program` and returns any errors if present
 //! Should be ran before going for code gen, since the later stages expect the
 //! program to be semantically sound.
-use std::collections::HashSet;
+use std::collections::HashMap;
 
-use crate::parser::{DirectValue, Expression, FuncName, Ident, Program, Scope, Stmts};
+use crate::parser::{DirectValue, Expression, FuncSignature, Ident, Program, Scope, Stmts};
 
 #[derive(Debug)]
 pub enum SemanticError {
-	UndefinedFunction(FuncName),
-	FunctionRedeclaration(FuncName),
+	UndefinedFunction(FuncSignature),
+	FunctionRedeclaration(FuncSignature),
 	UseBeforeDeclaration(Ident),
 	MultipleDeclaration(Ident),
 	ContinueOutsideLoop,
 	BreakOutsideLoop,
+	InvalidArguments(FuncSignature),
 }
 
 pub fn analyze(program: &Program) -> Result<(), SemanticError> {
 	let Program(functions) = program;
-	let mut defined_functions = HashSet::new();
+	let mut defined_functions = HashMap::new();
 	for func in functions {
-		if !defined_functions.insert(func.name().table_index) {
+		if let Some(_prev_decl) =
+			defined_functions.insert(func.name().table_index, func.parameter().len())
+		{
 			return Err(SemanticError::FunctionRedeclaration(func.name()));
 		}
-		let mut stack = ScopeStack::new(func.parameter());
-		stack.scope_analyze(&func.scope(), false)?;
-		if let Some(&undefined_func) = stack
-			.function_calls
-			.iter()
-			.find(|name| !defined_functions.contains(&name.table_index))
-		{
-			return Err(SemanticError::UndefinedFunction(undefined_func));
+		let mut stack = ScopeStack::new(func.parameter_table_idx());
+		stack.scope_analyze(&func.scope(), ScopeKind::Function, false)?;
+		if let Some(err) = stack.function_calls.iter().find_map(|signature| {
+			if let Some(parameter_count) = defined_functions.get(&signature.table_index) {
+				if *parameter_count != signature.parameter_count {
+					Some(SemanticError::InvalidArguments(*signature))
+				} else {
+					None
+				}
+			} else {
+				Some(SemanticError::UndefinedFunction(*signature))
+			}
+		}) {
+			return Err(err);
 		}
 	}
 	Ok(())
@@ -41,16 +50,19 @@ type ScopeTable = Vec<usize>;
 #[derive(Debug)]
 struct ScopeStack {
 	scope_table: Vec<ScopeTable>,
-	pub function_calls: Vec<FuncName>,
-	parameter: Ident,
+	pub function_calls: Vec<FuncSignature>,
+}
+
+enum ScopeKind {
+	Function,
+	Nested,
 }
 
 impl ScopeStack {
-	fn new(parameter: Ident) -> Self {
+	fn new(parameters: Vec<usize>) -> Self {
 		Self {
-			scope_table: Vec::new(),
+			scope_table: vec![parameters],
 			function_calls: Vec::new(),
-			parameter,
 		}
 	}
 	fn find_ident(&self, ident: &Ident) -> Result<(), Ident> {
@@ -59,7 +71,6 @@ impl ScopeStack {
 			.iter()
 			.flatten()
 			.any(|i| *i == ident.table_index)
-			|| self.parameter.table_index == ident.table_index
 		{
 			Ok(())
 		} else {
@@ -74,8 +85,10 @@ impl ScopeStack {
 			}
 		};
 		match expr {
-			Expression::FuncCall(func_name, direct_value) => {
-				find_direct_value(direct_value)?;
+			Expression::FuncCall(func_name, arguments) => {
+				for direct_value in arguments {
+					find_direct_value(direct_value)?;
+				}
 				self.function_calls.push(*func_name);
 				Ok(())
 			}
@@ -85,15 +98,20 @@ impl ScopeStack {
 			}
 		}
 	}
-	fn scope_analyze(&mut self, scope: &Scope, in_loop: bool) -> Result<(), SemanticError> {
-		self.scope_table.push(ScopeTable::new());
+	fn scope_analyze(
+		&mut self,
+		scope: &Scope,
+		scope_kind: ScopeKind,
+		in_loop: bool,
+	) -> Result<(), SemanticError> {
+		if let ScopeKind::Nested = scope_kind {
+			self.scope_table.push(ScopeTable::new());
+		}
 		for stmt in scope.0.iter() {
 			match stmt {
 				Stmts::Decl(ident) => {
 					let current_table = self.scope_table.last_mut().unwrap();
-					if current_table.contains(&ident.table_index)
-						|| self.parameter.table_index == ident.table_index
-					{
+					if current_table.contains(&ident.table_index) {
 						return Err(SemanticError::MultipleDeclaration(*ident));
 					}
 					current_table.push(ident.table_index)
@@ -109,7 +127,11 @@ impl ScopeStack {
 				Stmts::If(expr, scope) | Stmts::While(expr, scope) => {
 					self.expression_valid(expr)
 						.map_err(|ident| SemanticError::UseBeforeDeclaration(ident))?;
-					self.scope_analyze(scope, matches!(stmt, Stmts::While(_, _)) | in_loop)?
+					self.scope_analyze(
+						scope,
+						ScopeKind::Nested,
+						matches!(stmt, Stmts::While(_, _)) | in_loop,
+					)?
 				}
 				Stmts::Return(expr) => {
 					if let Err(ident) = self.expression_valid(expr) {
