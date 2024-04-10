@@ -1,5 +1,6 @@
 // Compute the nth fibonnaci number
-int fibb(int n) {
+int fibb(int n)
+{
 	if (n < 2) {
 		return n;
 	}
@@ -9,8 +10,9 @@ int fibb(int n) {
 	n_minus_1 = fibb(n);
 	n = n - 1;
 	n_minus_2 = fibb(n);
-	return  n_minus_1 + n_minus_2;
+	return n_minus_1 + n_minus_2;
 }
-int start(int a) {
+int start(int a)
+{
 	return fibb(10);
 }
