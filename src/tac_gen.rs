@@ -11,7 +11,7 @@ pub enum Ident {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operand {
 	Ident(Ident),
-	Temporary(usize),
+	Temporary,
 	Immediate(i32),
 }
 
@@ -59,7 +59,6 @@ struct TACGen {
 	scope_id: usize,
 	scope_map: Vec<Vec<usize>>,
 	parameter: usize,
-	temp_count: usize,
 }
 impl TACGen {
 	fn new(ident_count: usize, parameter_index: usize) -> Self {
@@ -69,7 +68,6 @@ impl TACGen {
 			// is the vector being resized
 			scope_map: (0..ident_count).map(|_| Vec::new()).collect(),
 			parameter: parameter_index,
-			temp_count: 0,
 		}
 	}
 	fn generate_ident(&self, ident: &parser::Ident) -> Ident {
@@ -137,32 +135,24 @@ impl TACGen {
 								*offset = -(i as isize);
 							}
 						});
-					let mut while_block =
-						self.generate_assignment(Operand::Temporary(self.temp_count), expr);
-					while_block.push(Instruction::Ifz(
-						Operand::Temporary(self.temp_count),
-						sub_scope.len() + 2,
-					));
+					let mut while_block = self.generate_assignment(Operand::Temporary, expr);
+					while_block.push(Instruction::Ifz(Operand::Temporary, sub_scope.len() + 2));
 					let loop_back_instruction = Instruction::Goto(-(sub_scope.len() as isize) - 2);
 					while_block.append(&mut sub_scope);
 					while_block.push(loop_back_instruction);
 					while_block
 				}
 				Stmts::Return(expr) => {
-					let mut res =
-						self.generate_assignment(Operand::Temporary(self.temp_count), expr);
-					res.push(Instruction::Return(Operand::Temporary(self.temp_count)));
+					let mut res = self.generate_assignment(Operand::Temporary, expr);
+					res.push(Instruction::Return(Operand::Temporary));
 					res
 				}
 				Stmts::If(expr, scope) => {
 					self.scope_id += 1;
 					let mut sub_scope = self.generate_scope(scope);
-					let mut if_block =
-						self.generate_assignment(Operand::Temporary(self.temp_count), expr);
-					if_block.push(Instruction::Ifz(
-						Operand::Temporary(self.temp_count),
-						sub_scope.len() + 1,
-					));
+					let mut if_block = self.generate_assignment(Operand::Temporary, expr);
+
+					if_block.push(Instruction::Ifz(Operand::Temporary, sub_scope.len() + 1));
 					if_block.append(&mut sub_scope);
 					if_block
 				}
@@ -201,10 +191,10 @@ mod test {
 					RValue::Assignment(Operand::Immediate(5)),
 				),
 				Instruction::Expression(
-					Operand::Temporary(0),
+					Operand::Temporary,
 					RValue::Assignment(Operand::Ident(Ident::Binded(2, 0))),
 				),
-				Instruction::Return(Operand::Temporary(0)),
+				Instruction::Return(Operand::Temporary),
 			],
 		}];
 		let (parsed, table) = parse(tokenize(test_program)).unwrap();
@@ -218,10 +208,10 @@ mod test {
 			id: 0,
 			instructions: vec![
 				Instruction::Expression(
-					Operand::Temporary(0),
+					Operand::Temporary,
 					RValue::Assignment(Operand::Immediate(1)),
 				),
-				Instruction::Ifz(Operand::Temporary(0), 1),
+				Instruction::Ifz(Operand::Temporary, 1),
 			],
 		}];
 		let (parsed, table) = parse(tokenize(test_program)).unwrap();
@@ -245,23 +235,23 @@ mod test {
 					RValue::Assignment(Operand::Immediate(5)),
 				),
 				Instruction::Expression(
-					Operand::Temporary(0),
+					Operand::Temporary,
 					RValue::Operation(
 						Operand::Ident(Ident::Binded(2, 0)),
 						BinaryOperation::LessEqual,
 						Operand::Immediate(4),
 					),
 				),
-				Instruction::Ifz(Operand::Temporary(0), 2),
+				Instruction::Ifz(Operand::Temporary, 2),
 				Instruction::Expression(
 					Operand::Ident(Ident::Binded(2, 0)),
 					RValue::Assignment(Operand::Immediate(2)),
 				),
 				Instruction::Expression(
-					Operand::Temporary(0),
+					Operand::Temporary,
 					RValue::Assignment(Operand::Ident(Ident::Binded(2, 0))),
 				),
-				Instruction::Return(Operand::Temporary(0)),
+				Instruction::Return(Operand::Temporary),
 			],
 		}];
 		let (parsed, table) = parse(tokenize(test_program)).unwrap();
@@ -290,14 +280,14 @@ mod test {
 					RValue::Assignment(Operand::Immediate(5)),
 				),
 				Instruction::Expression(
-					Operand::Temporary(0),
+					Operand::Temporary,
 					RValue::Operation(
 						Operand::Ident(Ident::Binded(2, 0)),
 						BinaryOperation::LessEqual,
 						Operand::Immediate(4),
 					),
 				),
-				Instruction::Ifz(Operand::Temporary(0), 7),
+				Instruction::Ifz(Operand::Temporary, 7),
 				Instruction::Expression(
 					Operand::Ident(Ident::Binded(2, 0)),
 					RValue::Operation(
@@ -307,14 +297,14 @@ mod test {
 					),
 				),
 				Instruction::Expression(
-					Operand::Temporary(0),
+					Operand::Temporary,
 					RValue::Operation(
 						Operand::Ident(Ident::Binded(2, 0)),
 						BinaryOperation::Greater,
 						Operand::Immediate(9),
 					),
 				),
-				Instruction::Ifz(Operand::Temporary(0), 4),
+				Instruction::Ifz(Operand::Temporary, 4),
 				Instruction::Expression(
 					Operand::Ident(Ident::Binded(2, 0)),
 					RValue::Assignment(Operand::Immediate(5)),
@@ -328,10 +318,10 @@ mod test {
 					RValue::Assignment(Operand::Immediate(2)),
 				),
 				Instruction::Expression(
-					Operand::Temporary(0),
+					Operand::Temporary,
 					RValue::Assignment(Operand::Ident(Ident::Binded(2, 0))),
 				),
-				Instruction::Return(Operand::Temporary(0)),
+				Instruction::Return(Operand::Temporary),
 			],
 		}];
 		let (parsed, table) = parse(tokenize(test_program)).unwrap();
@@ -345,10 +335,10 @@ mod test {
 			id: 0,
 			instructions: vec![
 				Instruction::Expression(
-					Operand::Temporary(0),
+					Operand::Temporary,
 					RValue::Assignment(Operand::Immediate(1)),
 				),
-				Instruction::Ifz(Operand::Temporary(0), 2),
+				Instruction::Ifz(Operand::Temporary, 2),
 				Instruction::Goto(-2),
 			],
 		}];
@@ -371,18 +361,18 @@ mod test {
 				id: 0,
 				instructions: vec![
 					Instruction::Expression(
-						Operand::Temporary(0),
+						Operand::Temporary,
 						RValue::Assignment(Operand::Immediate(1)),
 					),
-					Instruction::Return(Operand::Temporary(0)),
+					Instruction::Return(Operand::Temporary),
 				],
 			},
 			Function {
 				id: 2,
 				instructions: vec![
 					Instruction::Push(Operand::Immediate(1)),
-					Instruction::Expression(Operand::Temporary(0), RValue::FuncCall(0)),
-					Instruction::Return(Operand::Temporary(0)),
+					Instruction::Expression(Operand::Temporary, RValue::FuncCall(0)),
+					Instruction::Return(Operand::Temporary),
 				],
 			},
 		];

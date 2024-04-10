@@ -143,7 +143,7 @@ struct StackAllocator {
 	stack_usage: usize,
 	ident_table: HashMap<Ident, usize>,
 	arguments_size: usize,
-	temporary_var_table: HashMap<usize, usize>,
+	temporary_offset: Option<usize>,
 }
 impl StackAllocator {
 	fn parse_operand(&mut self, operand: Operand) -> String {
@@ -157,12 +157,12 @@ impl StackAllocator {
 				self.ident_table.insert(ident, offset);
 				format!("DWORD PTR [%rbp - {offset}]")
 			}
-			Operand::Temporary(index) => {
-				let offset = *self.temporary_var_table.get(&index).unwrap_or_else(|| {
+			Operand::Temporary => {
+				let offset = self.temporary_offset.unwrap_or_else(|| {
 					self.stack_usage += INTEGER_SIZE;
-					&self.stack_usage
+					self.temporary_offset = Some(self.stack_usage);
+					self.stack_usage
 				});
-				self.temporary_var_table.insert(index, offset);
 				format!("DWORD PTR [%rbp - {offset}]")
 			}
 			Operand::Immediate(val) => val.to_string(),
