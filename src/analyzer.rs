@@ -109,7 +109,7 @@ impl ScopeStack {
 				Stmts::If(expr, scope) | Stmts::While(expr, scope) => {
 					self.expression_valid(expr)
 						.map_err(|ident| SemanticError::UseBeforeDeclaration(ident))?;
-					self.scope_analyze(scope, matches!(stmt, Stmts::While(_, _)))?
+					self.scope_analyze(scope, matches!(stmt, Stmts::While(_, _)) | in_loop)?
 				}
 				Stmts::Return(expr) => {
 					if let Err(ident) = self.expression_valid(expr) {
