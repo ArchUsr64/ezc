@@ -205,6 +205,12 @@ struct Parser<I: Iterator<Item = Symbol> + std::fmt::Debug> {
 	const_table: Vec<String>,
 }
 impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
+	fn peek(&mut self) -> Option<Symbol> {
+		self.symbols.peek().copied()
+	}
+	fn tk_peek(&mut self) -> Option<Token> {
+		self.peek().map(|s| s.0)
+	}
 	fn next_if_eq(&mut self, needle: Token) -> bool {
 		self.symbols.next_if(|&i| i.token() == needle).is_some()
 	}
@@ -214,10 +220,10 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 			.map(|i| i.token())
 	}
 	fn ident(&mut self) -> Option<Ident> {
-		match self.symbols.peek() {
+		match self.peek() {
 			Some(Symbol(Token::Identifier(index), line_number)) => Some(Ident {
-				line_number: *line_number,
-				table_index: *index,
+				line_number,
+				table_index: index,
 			})
 			.take_if(|_| self.symbols.next().is_some()),
 			_ => None,
@@ -246,10 +252,7 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 	}
 	fn parameters(&mut self) -> Option<Parameters> {
 		let mut res = Vec::new();
-		while !matches!(
-			self.symbols.peek().map(|i| i.token()),
-			Some(Token::RightParenthesis)
-		) {
+		while !matches!(self.tk_peek(), Some(Token::RightParenthesis)) {
 			if !res.is_empty() && !self.next_if_eq(Token::Comma) {
 				return None;
 			}
@@ -265,10 +268,7 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 	}
 	fn arguments(&mut self) -> Option<Arguments> {
 		let mut res = Vec::new();
-		while !matches!(
-			self.symbols.peek().map(|i| i.token()),
-			Some(Token::RightParenthesis)
-		) {
+		while !matches!(self.tk_peek(), Some(Token::RightParenthesis)) {
 			if !res.is_empty() && !self.next_if_eq(Token::Comma) {
 				return None;
 			}
@@ -374,9 +374,8 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 		}
 	}
 	fn binary_operation(&mut self) -> Option<BinaryOperation> {
-		self.symbols
-			.next_if(|tk| BinaryOperation::from_token(&tk.token()).is_some())
-			.map(|tk| BinaryOperation::from_token(&tk.token()))?
+		self.next_if(|tk| BinaryOperation::from_token(&tk).is_some())
+			.map(|tk| BinaryOperation::from_token(&tk))?
 	}
 	fn parse_const(&self, value: &str) -> Option<i32> {
 		if let Ok(val) = value.parse::<i32>() {
