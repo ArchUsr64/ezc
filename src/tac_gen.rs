@@ -1,5 +1,5 @@
 //! Three Address Code Generation
-use crate::parser::{self, Program};
+use crate::parser::{self, Decl, Program, Stmts};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Ident {
@@ -114,12 +114,21 @@ impl TACGen {
 		const PENDING_CONTINUE: isize = isize::MIN;
 		let mut instructions = Vec::new();
 		for stmt in scope.0.iter() {
-			use parser::{Ident, Stmts};
 			let mut generated_instructions = match stmt {
-				Stmts::Decl(Ident { table_index, .. }) => {
-					self.scope_map[*table_index].push(self.scope_id);
-					Vec::new()
-				}
+				Stmts::Decl(decls) => decls
+					.iter()
+					.flat_map(|Decl(ident, expr)| {
+						self.scope_map[ident.table_index].push(self.scope_id);
+						if let Some(expr) = expr {
+							self.generate_assignment(
+								Operand::Ident(self.generate_ident(ident)),
+								expr,
+							)
+						} else {
+							Vec::new()
+						}
+					})
+					.collect(),
 				Stmts::Assignment(ident, expr) => {
 					self.generate_assignment(Operand::Ident(self.generate_ident(ident)), expr)
 				}
