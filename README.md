@@ -16,21 +16,37 @@ EZC (pronounced Easy-C) is a tiny subset of C
 ### Example:
 [`src/test.c`](https://github.com/ArchUsr64/ezc/blob/main/src/test.c)
 ```c
-// Compute the nth fibonnaci number
-int fibb(int n) {
+int fibb_iter(int n) {
+	int i, first, second;
+	i = 1;
+	first = 0;
+	second = 1;
+	while (1) {
+		if (i >= n) {
+			break;
+		}
+		second = first + second;
+		first = second - first;
+		i = i + 1;
+	}
+	return second;
+}
+int fibb(int n)
+{
 	if (n < 2) {
 		return n;
 	}
-	int n_minus_1;
-	int n_minus_2;
+	int n_minus_1, n_minus_2;
 	n = n - 1;
 	n_minus_1 = fibb(n);
 	n = n - 1;
 	n_minus_2 = fibb(n);
-	return  n_minus_1 + n_minus_2;
+	return n_minus_1 + n_minus_2;
 }
-int start(int a) {
-	return fibb(10);
+int start()
+{
+	int n = 10, iter = fibb_iter(n), recurse = fibb(n);
+	return iter == recurse;
 }
 ```
 ### Output:
@@ -45,35 +61,49 @@ cargo run
 as ezc.asm -o ezc.o
 gcc main.o ezc.o -o ezc.out
 GCC output:
-55
+1
 EZC output:
-55
+1
 
 ```
 
 ## Grammar
-```c
-<Func>
-| int Ident(int Ident) {<Stmts>*}
+ ```c
+ <Func>
+ | int Ident(<Parmeter>*) {<Stmts>*}
 
-<Stmts>
-| if (<Expression>) {<Stmts>*}
-| while (<Expression>) {<Stmts>*}
-| int Ident;
-| Ident = <Expression>;
-| break;
-| continue;
-| return <Expression>;
+ <Parameters>
+ | int Ident
+ | int Ident, <Parameter>
 
-<Expression>
-| Ident(<DirectValue>)
-| <DirectValue>
-| <DirectValue> <BinaryOperation> <DirectValue>
+ <Stmts>
+ | if (<Expression>) {<Stmts>*}
+ | while (<Expression>) {<Stmts>*}
+ | int <Decl>;
+ | Ident = <Expression>;
+ | break;
+ | continue;
+ | return <Expression>;
 
-<DirectValue>
-| Ident
-| Const
+ <Decl>
+ | Ident
+ | Ident, <Decl>
+ | Ident = <Expression>
+ | Ident = <Expression>, <Decl>
 
-<BinaryOperation>
-| +, -, *, /, %, &, |, ^, <, <=, >, >=, ==, !=
+ <Expression>
+ | Ident(<Arguments>)
+ | <DirectValue>
+ | <DirectValue> <BinaryOperation> <DirectValue>
+
+ <Arguments>
+ | <DirectValue>
+ | <DirectValue>, <Arguments>
+
+ <DirectValue>
+ | Ident
+ | Const
+
+ <BinaryOperation>
+ | +, -, *, /, %, &, |, ^, <, <=, >, >=, ==, !=
 ```

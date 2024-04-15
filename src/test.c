@@ -1,8 +1,3 @@
-int add(int a, int b) {
-	int res;
-	res = a + b;
-	return res;
-}
 int fibb_iter(int n) {
 	int i, first, second;
 	i = 1;
@@ -12,7 +7,7 @@ int fibb_iter(int n) {
 		if (i >= n) {
 			break;
 		}
-		second = add(first, second);
+		second = first + second;
 		first = second - first;
 		i = i + 1;
 	}
@@ -28,7 +23,7 @@ int fibb(int n)
 	n_minus_1 = fibb(n);
 	n = n - 1;
 	n_minus_2 = fibb(n);
-	return add(n_minus_1, n_minus_2);
+	return n_minus_1 + n_minus_2;
 }
 int start()
 {
