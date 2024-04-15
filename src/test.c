@@ -4,10 +4,8 @@ int add(int a, int b) {
 	return res;
 }
 int fibb_iter(int n) {
-	int i;
+	int i, first, second;
 	i = 1;
-	int first;
-	int second;
 	first = 0;
 	second = 1;
 	while (1) {
@@ -25,8 +23,7 @@ int fibb(int n)
 	if (n < 2) {
 		return n;
 	}
-	int n_minus_1;
-	int n_minus_2;
+	int n_minus_1, n_minus_2;
 	n = n - 1;
 	n_minus_1 = fibb(n);
 	n = n - 1;
@@ -35,11 +32,6 @@ int fibb(int n)
 }
 int start()
 {
-	int n;
-	n = 10;
-	int iter;
-	iter = fibb_iter(n);
-	int recurse;
-	recurse = fibb(n);
+	int n = 10, iter = fibb_iter(n), recurse = fibb(n);
 	return iter == recurse;
 }

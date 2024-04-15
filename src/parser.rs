@@ -13,11 +13,17 @@
 //! <Stmts>
 //! | if (<Expression>) {<Stmts>*}
 //! | while (<Expression>) {<Stmts>*}
-//! | int Ident;
+//! | int <Decl>;
 //! | Ident = <Expression>;
 //! | break;
 //! | continue;
 //! | return <Expression>;
+//!
+//! <Decl>
+//! | Ident
+//! | Ident, <Decl>
+//! | Ident = <Expression>
+//! | Ident = <Expression>, <Decl>
 //!
 //! <Expression>
 //! | Ident(<Arguments>)
@@ -133,10 +139,13 @@ impl Func {
 pub type Parameters = Vec<Ident>;
 
 #[derive(Clone, Debug)]
+pub struct Decl(pub Ident, pub Option<Expression>);
+
+#[derive(Clone, Debug)]
 pub enum Stmts {
 	If(Expression, Scope),
 	While(Expression, Scope),
-	Decl(Ident),
+	Decl(Vec<Decl>),
 	Assignment(Ident, Expression),
 	Break,
 	Continue,
@@ -250,6 +259,24 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 			None
 		}
 	}
+	fn decl(&mut self) -> Option<Vec<Decl>> {
+		let mut res = Vec::new();
+		while !matches!(self.tk_peek(), Some(Token::Semicolon)) {
+			if !res.is_empty() && !self.next_if_eq(Token::Comma) {
+				return None;
+			}
+			if let Some(ident) = self.ident() {
+				if self.next_if_eq(Token::Equal) {
+					res.push(Decl(ident, self.expression()));
+				} else {
+					res.push(Decl(ident, None));
+				}
+			} else {
+				return None;
+			}
+		}
+		Some(res)
+	}
 	fn parameters(&mut self) -> Option<Parameters> {
 		let mut res = Vec::new();
 		while !matches!(self.tk_peek(), Some(Token::RightParenthesis)) {
@@ -307,10 +334,10 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 			Some(Stmts::While(expression, Scope(stmts)))
 				.take_if(|_| self.next_if_eq(Token::RightBrace))
 		} else if self.next_if_eq(Token::Keyword(Reserved::Int))
-			&& let Some(ident) = self.ident()
+			&& let Some(decl) = self.decl()
 			&& self.next_if_eq(Token::Semicolon)
 		{
-			Some(Stmts::Decl(ident))
+			Some(Stmts::Decl(decl))
 		} else if let Some(ident) = self.ident()
 			&& self.next_if_eq(Token::Equal)
 			&& let Some(expression) = self.expression()
