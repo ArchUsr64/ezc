@@ -28,7 +28,7 @@ pub fn analyze(program: &Program) -> Result<(), SemanticError> {
 			return Err(SemanticError::FunctionRedeclaration(func.name()));
 		}
 		let mut stack = ScopeStack::new(func.parameter_table_idx(), &defined_functions);
-		stack.scope_analyze(&func.scope(), ScopeKind::Function, false)?;
+		stack.scope_analyze(func.scope(), ScopeKind::Function, false)?;
 	}
 	Ok(())
 }
@@ -86,7 +86,7 @@ impl<'a> ScopeStack<'a> {
 				Ok(())
 			}
 			Expression::DirectValue(d_value) => find_direct_value(d_value),
-			Expression::BinaryExpression(l_value, _, r_value) => {
+			Expression::Binary(l_value, _, r_value) => {
 				find_direct_value(l_value).and_then(|_| find_direct_value(r_value))
 			}
 		}

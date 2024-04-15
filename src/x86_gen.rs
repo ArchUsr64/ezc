@@ -1,9 +1,10 @@
 //! x86 backend
 use std::collections::HashMap;
+use std::fmt::Write;
 
 use crate::{
 	parser::{self, BinaryOperation},
-	tac_gen::{self, Ident, Operand, RValue},
+	tac_gen::{self, Function, Ident, Operand, RValue},
 };
 
 const PRELUDE: &str = r".intel_mnemonic
@@ -23,9 +24,14 @@ pub fn x86_gen(
 
 	res += tac_instruction
 		.iter()
-		.map(|func| ident_table.0[func.id].as_str())
-		.map(|func_name| format!("\n.global {func_name}\n.type {func_name}, @function"))
-		.collect::<String>()
+		.fold(String::new(), |mut out, Function { id, .. }| {
+			let _ = write!(
+				out,
+				"\n.global {func_name}\n.type {func_name}, @function",
+				func_name = ident_table.0[*id]
+			);
+			out
+		})
 		.as_str();
 
 	for tac_gen::Function {

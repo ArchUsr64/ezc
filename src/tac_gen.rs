@@ -102,7 +102,7 @@ impl TACGen {
 				RValue::FuncCall(func.table_index, argument.len())
 			}
 			Expression::DirectValue(r_value) => RValue::Assignment(to_operand(r_value)),
-			Expression::BinaryExpression(l_value, op, r_value) => {
+			Expression::Binary(l_value, op, r_value) => {
 				RValue::Operation(to_operand(l_value), *op, to_operand(r_value))
 			}
 		};

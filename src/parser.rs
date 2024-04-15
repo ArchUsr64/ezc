@@ -156,7 +156,7 @@ pub enum Stmts {
 pub enum Expression {
 	FuncCall(FuncSignature, Arguments),
 	DirectValue(DirectValue),
-	BinaryExpression(DirectValue, BinaryOperation, DirectValue),
+	Binary(DirectValue, BinaryOperation, DirectValue),
 }
 
 type Arguments = Vec<DirectValue>;
@@ -378,7 +378,7 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 			}
 		}
 		if let Some(binary_operation) = self.binary_operation() {
-			Some(Expression::BinaryExpression(
+			Some(Expression::Binary(
 				l_value,
 				binary_operation,
 				self.direct_value()?,
