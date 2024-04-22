@@ -12,7 +12,7 @@ pub enum Ident {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operand {
 	Ident(Ident),
-	Temporary,
+	Temporary(usize),
 	Immediate(i32),
 }
 
@@ -22,12 +22,15 @@ pub enum RValue {
 	FuncCall(usize, usize),
 	Assignment(Operand),
 	Operation(Operand, parser::BinaryOperation, Operand),
+	ArrayAccess(Ident, Operand),
 }
 
 type AddressOffset = usize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instruction {
+	ArrayAlloc(Ident, u32),
+	ArrayWrite(Ident, Operand, Operand),
 	Ifz(Operand, AddressOffset),
 	Expression(Operand, RValue),
 	Return(Operand),
@@ -72,9 +75,19 @@ impl TACGen {
 			scope_map: (0..ident_count).map(|_| Vec::new()).collect(),
 		}
 	}
+	fn end_scope(&mut self) {
+		println!("End scope");
+		self.scope_id -= 1;
+		self.scope_map
+			.iter_mut()
+			.filter(|i| i.last() == Some(dbg!(&self.scope_id)))
+			.for_each(|i| {
+				i.pop();
+			})
+	}
 	fn generate_ident(&self, ident: &parser::Ident) -> Ident {
 		let name_index = ident.table_index;
-		if let Some(scope_id) = self.scope_map[name_index].last() {
+		if let Some(scope_id) = dbg!(&self.scope_map)[name_index].last() {
 			Ident::Binded(name_index, *scope_id)
 		} else {
 			Ident::Parameter(
@@ -105,6 +118,9 @@ impl TACGen {
 			Expression::Binary(l_value, op, r_value) => {
 				RValue::Operation(to_operand(l_value), *op, to_operand(r_value))
 			}
+			Expression::ArrayAccess(ident, index) => {
+				RValue::ArrayAccess(self.generate_ident(ident), to_operand(index))
+			}
 		};
 		res.push(Instruction::Expression(lhs, r_value));
 		res
@@ -117,20 +133,37 @@ impl TACGen {
 			let mut generated_instructions = match stmt {
 				Stmts::Decl(decls) => decls
 					.iter()
-					.flat_map(|Decl(ident, expr)| {
-						self.scope_map[ident.table_index].push(self.scope_id);
-						if let Some(expr) = expr {
-							self.generate_assignment(
-								Operand::Ident(self.generate_ident(ident)),
-								expr,
-							)
-						} else {
-							Vec::new()
+					.flat_map(|decl| match decl {
+						Decl::Variable { name, init_val } => {
+							self.scope_map[name.table_index].push(self.scope_id);
+							if let Some(expr) = init_val {
+								self.generate_assignment(
+									Operand::Ident(self.generate_ident(name)),
+									expr,
+								)
+							} else {
+								Vec::new()
+							}
+						}
+						Decl::Array { name, size } => {
+							self.scope_map[name.table_index].push(self.scope_id);
+							vec![Instruction::ArrayAlloc(self.generate_ident(name), *size)]
 						}
 					})
 					.collect(),
 				Stmts::Assignment(ident, expr) => {
 					self.generate_assignment(Operand::Ident(self.generate_ident(ident)), expr)
+				}
+				Stmts::ArrayAssignment(ident, index, r_value) => {
+					let mut res = Vec::new();
+					res.append(&mut self.generate_assignment(Operand::Temporary(0), index));
+					res.append(&mut self.generate_assignment(Operand::Temporary(1), r_value));
+					res.push(Instruction::ArrayWrite(
+						self.generate_ident(ident),
+						Operand::Temporary(0),
+						Operand::Temporary(1),
+					));
+					res
 				}
 				Stmts::While(expr, scope) => {
 					self.scope_id += 1;
@@ -153,25 +186,27 @@ impl TACGen {
 								*offset = -(i as isize);
 							}
 						});
-					let mut while_block = self.generate_assignment(Operand::Temporary, expr);
-					while_block.push(Instruction::Ifz(Operand::Temporary, sub_scope.len() + 2));
+					let mut while_block = self.generate_assignment(Operand::Temporary(0), expr);
+					while_block.push(Instruction::Ifz(Operand::Temporary(0), sub_scope.len() + 2));
 					let loop_back_instruction = Instruction::Goto(-(sub_scope.len() as isize) - 2);
 					while_block.append(&mut sub_scope);
 					while_block.push(loop_back_instruction);
+					self.end_scope();
 					while_block
 				}
 				Stmts::Return(expr) => {
-					let mut res = self.generate_assignment(Operand::Temporary, expr);
-					res.push(Instruction::Return(Operand::Temporary));
+					let mut res = self.generate_assignment(Operand::Temporary(0), expr);
+					res.push(Instruction::Return(Operand::Temporary(0)));
 					res
 				}
 				Stmts::If(expr, scope) => {
 					self.scope_id += 1;
 					let mut sub_scope = self.generate_scope(scope);
-					let mut if_block = self.generate_assignment(Operand::Temporary, expr);
+					let mut if_block = self.generate_assignment(Operand::Temporary(0), expr);
 
-					if_block.push(Instruction::Ifz(Operand::Temporary, sub_scope.len() + 1));
+					if_block.push(Instruction::Ifz(Operand::Temporary(0), sub_scope.len() + 1));
 					if_block.append(&mut sub_scope);
+					self.end_scope();
 					if_block
 				}
 				Stmts::Break => vec![Instruction::Goto(PENDING_BREAK)],
@@ -209,10 +244,10 @@ mod test {
 					RValue::Assignment(Operand::Immediate(5)),
 				),
 				Instruction::Expression(
-					Operand::Temporary,
+					Operand::Temporary(0),
 					RValue::Assignment(Operand::Ident(Ident::Binded(2, 0))),
 				),
-				Instruction::Return(Operand::Temporary),
+				Instruction::Return(Operand::Temporary(0)),
 			],
 		}];
 		let (parsed, table) = parse(tokenize(test_program)).unwrap();
@@ -226,10 +261,10 @@ mod test {
 			id: 0,
 			instructions: vec![
 				Instruction::Expression(
-					Operand::Temporary,
+					Operand::Temporary(0),
 					RValue::Assignment(Operand::Immediate(1)),
 				),
-				Instruction::Ifz(Operand::Temporary, 1),
+				Instruction::Ifz(Operand::Temporary(0), 1),
 			],
 		}];
 		let (parsed, table) = parse(tokenize(test_program)).unwrap();
@@ -253,23 +288,23 @@ mod test {
 					RValue::Assignment(Operand::Immediate(5)),
 				),
 				Instruction::Expression(
-					Operand::Temporary,
+					Operand::Temporary(0),
 					RValue::Operation(
 						Operand::Ident(Ident::Binded(2, 0)),
 						BinaryOperation::LessEqual,
 						Operand::Immediate(4),
 					),
 				),
-				Instruction::Ifz(Operand::Temporary, 2),
+				Instruction::Ifz(Operand::Temporary(0), 2),
 				Instruction::Expression(
 					Operand::Ident(Ident::Binded(2, 0)),
 					RValue::Assignment(Operand::Immediate(2)),
 				),
 				Instruction::Expression(
-					Operand::Temporary,
+					Operand::Temporary(0),
 					RValue::Assignment(Operand::Ident(Ident::Binded(2, 0))),
 				),
-				Instruction::Return(Operand::Temporary),
+				Instruction::Return(Operand::Temporary(0)),
 			],
 		}];
 		let (parsed, table) = parse(tokenize(test_program)).unwrap();
@@ -298,14 +333,14 @@ mod test {
 					RValue::Assignment(Operand::Immediate(5)),
 				),
 				Instruction::Expression(
-					Operand::Temporary,
+					Operand::Temporary(0),
 					RValue::Operation(
 						Operand::Ident(Ident::Binded(2, 0)),
 						BinaryOperation::LessEqual,
 						Operand::Immediate(4),
 					),
 				),
-				Instruction::Ifz(Operand::Temporary, 7),
+				Instruction::Ifz(Operand::Temporary(0), 7),
 				Instruction::Expression(
 					Operand::Ident(Ident::Binded(2, 0)),
 					RValue::Operation(
@@ -315,14 +350,14 @@ mod test {
 					),
 				),
 				Instruction::Expression(
-					Operand::Temporary,
+					Operand::Temporary(0),
 					RValue::Operation(
 						Operand::Ident(Ident::Binded(2, 0)),
 						BinaryOperation::Greater,
 						Operand::Immediate(9),
 					),
 				),
-				Instruction::Ifz(Operand::Temporary, 4),
+				Instruction::Ifz(Operand::Temporary(0), 4),
 				Instruction::Expression(
 					Operand::Ident(Ident::Binded(2, 0)),
 					RValue::Assignment(Operand::Immediate(5)),
@@ -336,10 +371,10 @@ mod test {
 					RValue::Assignment(Operand::Immediate(2)),
 				),
 				Instruction::Expression(
-					Operand::Temporary,
+					Operand::Temporary(0),
 					RValue::Assignment(Operand::Ident(Ident::Binded(2, 0))),
 				),
-				Instruction::Return(Operand::Temporary),
+				Instruction::Return(Operand::Temporary(0)),
 			],
 		}];
 		let (parsed, table) = parse(tokenize(test_program)).unwrap();
@@ -353,10 +388,10 @@ mod test {
 			id: 0,
 			instructions: vec![
 				Instruction::Expression(
-					Operand::Temporary,
+					Operand::Temporary(0),
 					RValue::Assignment(Operand::Immediate(1)),
 				),
-				Instruction::Ifz(Operand::Temporary, 2),
+				Instruction::Ifz(Operand::Temporary(0), 2),
 				Instruction::Goto(-2),
 			],
 		}];
@@ -379,18 +414,18 @@ mod test {
 				id: 0,
 				instructions: vec![
 					Instruction::Expression(
-						Operand::Temporary,
+						Operand::Temporary(0),
 						RValue::Assignment(Operand::Immediate(1)),
 					),
-					Instruction::Return(Operand::Temporary),
+					Instruction::Return(Operand::Temporary(0)),
 				],
 			},
 			Function {
 				id: 2,
 				instructions: vec![
 					Instruction::Push(Operand::Immediate(1)),
-					Instruction::Expression(Operand::Temporary, RValue::FuncCall(0, 1)),
-					Instruction::Return(Operand::Temporary),
+					Instruction::Expression(Operand::Temporary(0), RValue::FuncCall(0, 1)),
+					Instruction::Return(Operand::Temporary(0)),
 				],
 			},
 		];

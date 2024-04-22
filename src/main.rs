@@ -17,7 +17,9 @@ fn main() {
 		use analyzer::SemanticError;
 		match kind {
 			SemanticError::UseBeforeDeclaration(ident)
-			| SemanticError::MultipleDeclaration(ident) => panic!(
+			| SemanticError::MultipleDeclaration(ident)
+			| SemanticError::ExpectedPrimitiveFoundArray(ident)
+			| SemanticError::ExpectedArrayFoundPrimitive(ident) => panic!(
 				"Err: '{kind:?}' at '{ident:?}' name: {:?}",
 				ident_table.0.get(ident.table_index)
 			),

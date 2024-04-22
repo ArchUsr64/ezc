@@ -76,6 +76,20 @@ F{func_id}:
 					asm.push(format!("\n# {i}: {tac:?}"));
 				}
 				asm.append(&mut match tac {
+					Instruction::ArrayWrite(name, index, r_val) => vec![
+						format!("mov %edi, {}", allocator.parse_operand(*index)),
+						format!("shl %rdi"),
+						format!("shl %rdi"),
+						format!("mov %rsi, %rbp"),
+						format!("sub %rsi, {}", allocator.ident_table.get(&name).unwrap()),
+						format!("add %rsi, %rdi"),
+						format!("mov %eax, {}", allocator.parse_operand(*r_val)),
+						format!("mov DWORD PTR [%rsi], %eax"),
+					],
+					Instruction::ArrayAlloc(name, size) => {
+						allocator.array_alloc(*dbg!(name), *size);
+						Vec::new()
+					}
 					Instruction::Return(op) => vec![
 						format!("mov %eax, {}", allocator.parse_operand(*op)),
 						format!("jmp END_{func_id}"),
@@ -154,7 +168,7 @@ struct StackAllocator {
 	stack_usage: usize,
 	ident_table: HashMap<Ident, usize>,
 	arguments_size: usize,
-	temporary_offset: Option<usize>,
+	temporary_offset: HashMap<usize, usize>,
 }
 impl StackAllocator {
 	fn parse_operand(&mut self, operand: Operand) -> String {
@@ -173,19 +187,38 @@ impl StackAllocator {
 				self.ident_table.insert(ident, offset);
 				format!("DWORD PTR [%rbp - {offset}]")
 			}
-			Operand::Temporary => {
-				let offset = self.temporary_offset.unwrap_or_else(|| {
+			Operand::Temporary(id) => {
+				let offset = *self.temporary_offset.get(&id).unwrap_or_else(|| {
 					self.stack_usage += INTEGER_SIZE;
-					self.temporary_offset = Some(self.stack_usage);
-					self.stack_usage
+					&self.stack_usage
 				});
+				self.temporary_offset.insert(id, offset);
 				format!("DWORD PTR [%rbp - {offset}]")
 			}
 			Operand::Immediate(val) => val.to_string(),
 		}
 	}
+	fn array_alloc(&mut self, name: Ident, size: u32) {
+		self.stack_usage += INTEGER_SIZE * size as usize;
+		self.ident_table.insert(name, self.stack_usage);
+	}
 	fn expression_gen(&mut self, l_value: Operand, r_value: RValue) -> Vec<String> {
 		match r_value {
+			RValue::ArrayAccess(ident, index) => {
+				vec![
+					format!("mov %edi, {}", self.parse_operand(index)),
+					format!("shl %rdi"),
+					format!("shl %rdi"),
+					format!("mov %rsi, %rbp"),
+					format!(
+						"sub %rsi, {}",
+						dbg!(&self.ident_table).get(&dbg!(ident)).unwrap()
+					),
+					format!("add %rsi, %rdi"),
+					format!("mov %eax, DWORD PTR [%rsi]"),
+					format!("mov {}, %eax", self.parse_operand(l_value)),
+				]
+			}
 			RValue::Assignment(Operand::Immediate(val)) => {
 				vec![format!("mov {}, {}", self.parse_operand(l_value), val)]
 			}
