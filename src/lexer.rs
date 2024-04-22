@@ -15,6 +15,8 @@ pub enum Token {
 	RightParenthesis,
 	LeftBrace,
 	RightBrace,
+	LeftSquare,
+	RightSquare,
 	Semicolon,
 
 	// Operators
@@ -297,6 +299,8 @@ pub fn tokenize(input_stream: &str) -> LexerOutput {
 			')' => Token::RightParenthesis,
 			'{' => Token::LeftBrace,
 			'}' => Token::RightBrace,
+			'[' => Token::LeftSquare,
+			']' => Token::RightSquare,
 			x => panic!("{x} at line#{line_number}"),
 		};
 		symbol.push(Symbol(matched_token, line_number));

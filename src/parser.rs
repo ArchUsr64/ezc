@@ -14,6 +14,7 @@
 //! | if (<Expression>) {<Stmts>*}
 //! | while (<Expression>) {<Stmts>*}
 //! | int <Decl>;
+//! | Ident [<Expression>] = <Expression>;
 //! | Ident = <Expression>;
 //! | break;
 //! | continue;
@@ -22,11 +23,14 @@
 //! <Decl>
 //! | Ident
 //! | Ident, <Decl>
+//! | Ident [<Const>]
+//! | Ident [<Const>], <Decl>
 //! | Ident = <Expression>
 //! | Ident = <Expression>, <Decl>
 //!
 //! <Expression>
 //! | Ident(<Arguments>)
+//! | Ident[<DirectValue>]
 //! | <DirectValue>
 //! | <DirectValue> <BinaryOperation> <DirectValue>
 //!
@@ -139,7 +143,16 @@ impl Func {
 pub type Parameters = Vec<Ident>;
 
 #[derive(Clone, Debug)]
-pub struct Decl(pub Ident, pub Option<Expression>);
+pub enum Decl {
+	Array {
+		name: Ident,
+		size: u32,
+	},
+	Variable {
+		name: Ident,
+		init_val: Option<Expression>,
+	},
+}
 
 #[derive(Clone, Debug)]
 pub enum Stmts {
@@ -147,6 +160,7 @@ pub enum Stmts {
 	While(Expression, Scope),
 	Decl(Vec<Decl>),
 	Assignment(Ident, Expression),
+	ArrayAssignment(Ident, Expression, Expression),
 	Break,
 	Continue,
 	Return(Expression),
@@ -155,13 +169,14 @@ pub enum Stmts {
 #[derive(Clone, Debug)]
 pub enum Expression {
 	FuncCall(FuncSignature, Arguments),
+	ArrayAccess(Ident, DirectValue),
 	DirectValue(DirectValue),
 	Binary(DirectValue, BinaryOperation, DirectValue),
 }
 
 type Arguments = Vec<DirectValue>;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum DirectValue {
 	Ident(Ident),
 	Const(i32),
@@ -262,14 +277,29 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 	fn decl(&mut self) -> Option<Vec<Decl>> {
 		let mut res = Vec::new();
 		while !matches!(self.tk_peek(), Some(Token::Semicolon)) {
+			dbg!(&res);
 			if !res.is_empty() && !self.next_if_eq(Token::Comma) {
 				return None;
 			}
-			if let Some(ident) = self.ident() {
+			if let Some(name) = self.ident() {
 				if self.next_if_eq(Token::Equal) {
-					res.push(Decl(ident, self.expression()));
+					res.push(Decl::Variable {
+						name,
+						init_val: self.expression(),
+					});
+				} else if self.next_if_eq(Token::LeftSquare) {
+					res.push(Decl::Array {
+						name,
+						size: self.constant()? as u32,
+					});
+					if !self.next_if_eq(Token::RightSquare) {
+						return None;
+					}
 				} else {
-					res.push(Decl(ident, None));
+					res.push(Decl::Variable {
+						name,
+						init_val: None,
+					});
 				}
 			} else {
 				return None;
@@ -338,12 +368,23 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 			&& self.next_if_eq(Token::Semicolon)
 		{
 			Some(Stmts::Decl(decl))
-		} else if let Some(ident) = self.ident()
-			&& self.next_if_eq(Token::Equal)
-			&& let Some(expression) = self.expression()
-			&& self.next_if_eq(Token::Semicolon)
-		{
-			Some(Stmts::Assignment(ident, expression))
+		} else if let Some(ident) = self.ident() {
+			if self.next_if_eq(Token::Equal)
+				&& let Some(expression) = self.expression()
+				&& self.next_if_eq(Token::Semicolon)
+			{
+				Some(Stmts::Assignment(ident, expression))
+			} else if self.next_if_eq(Token::LeftSquare)
+				&& let Some(index) = self.expression()
+				&& self.next_if_eq(Token::RightSquare)
+				&& self.next_if_eq(Token::Equal)
+				&& let Some(r_value) = self.expression()
+				&& self.next_if_eq(Token::Semicolon)
+			{
+				Some(Stmts::ArrayAssignment(ident, index, r_value))
+			} else {
+				None
+			}
 		} else if self.next_if_eq(Token::Keyword(Reserved::Break))
 			&& self.next_if_eq(Token::Semicolon)
 		{
@@ -376,6 +417,15 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 					return None;
 				}
 			}
+			if self.next_if_eq(Token::LeftSquare) {
+				if let Some(size) = self.direct_value()
+					&& self.next_if_eq(Token::RightSquare)
+				{
+					return Some(Expression::ArrayAccess(ident, size));
+				} else {
+					return None;
+				}
+			}
 		}
 		if let Some(binary_operation) = self.binary_operation() {
 			Some(Expression::Binary(
@@ -391,13 +441,16 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 		if let Some(val) = self.ident() {
 			Some(DirectValue::Ident(val))
 		} else {
-			let sign = if self.next_if_eq(Token::Minus) { -1 } else { 1 };
-			match self.next_if(|i| matches!(i, Token::Const(_))) {
-				Some(Token::Const(symbol_idx)) => Some(DirectValue::Const(
-					sign * self.parse_const(self.const_table.get(symbol_idx)?)?,
-				)),
-				_ => None,
+			self.constant().map(|val| DirectValue::Const(val))
+		}
+	}
+	fn constant(&mut self) -> Option<i32> {
+		let sign = if self.next_if_eq(Token::Minus) { -1 } else { 1 };
+		match self.next_if(|i| matches!(i, Token::Const(_))) {
+			Some(Token::Const(symbol_idx)) => {
+				Some(sign * self.parse_const(self.const_table.get(symbol_idx)?)?)
 			}
+			_ => None,
 		}
 	}
 	fn binary_operation(&mut self) -> Option<BinaryOperation> {
