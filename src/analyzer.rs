@@ -16,6 +16,8 @@ pub enum SemanticError {
 	ContinueOutsideLoop,
 	BreakOutsideLoop,
 	InvalidArguments(FuncSignature),
+	ExpectedPrimitiveFoundArray(Ident),
+	ExpectedArrayFoundPrimitive(Ident),
 }
 
 pub fn analyze(program: &Program) -> Result<(), SemanticError> {
@@ -33,7 +35,13 @@ pub fn analyze(program: &Program) -> Result<(), SemanticError> {
 	Ok(())
 }
 
-type ScopeTable = Vec<usize>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IdentType {
+	Primitive,
+	Array,
+}
+
+type ScopeTable = Vec<(usize, IdentType)>;
 #[derive(Debug)]
 struct ScopeStack<'a> {
 	scope_table: Vec<ScopeTable>,
@@ -48,30 +56,47 @@ enum ScopeKind {
 impl<'a> ScopeStack<'a> {
 	fn new(parameters: Vec<usize>, defined_functions: &'a HashMap<usize, usize>) -> Self {
 		Self {
-			scope_table: vec![parameters],
+			scope_table: vec![parameters
+				.iter()
+				.copied()
+				.map(|id| (id, IdentType::Primitive))
+				.collect()],
 			defined_functions,
 		}
 	}
-	fn find_ident(&self, ident: &Ident) -> bool {
+	fn get_ident_type(&self, ident: &Ident) -> Option<IdentType> {
 		self.scope_table
 			.iter()
 			.flatten()
-			.any(|i| *i == ident.table_index)
+			.rev()
+			.find(|(i, _)| *i == ident.table_index)
+			.map(|i| i.1)
+	}
+	fn find_ident(&self, ident: &Ident) -> Result<(), SemanticError> {
+		match self.get_ident_type(ident) {
+			Some(IdentType::Primitive) => Ok(()),
+			Some(IdentType::Array) => Err(SemanticError::ExpectedPrimitiveFoundArray(*ident)),
+			None => Err(SemanticError::UseBeforeDeclaration(*ident)),
+		}
+	}
+	fn find_array(&self, ident: &Ident) -> Result<(), SemanticError> {
+		match self.get_ident_type(ident) {
+			Some(IdentType::Array) => Ok(()),
+			Some(IdentType::Primitive) => Err(SemanticError::ExpectedArrayFoundPrimitive(*ident)),
+			None => Err(SemanticError::UseBeforeDeclaration(*ident)),
+		}
 	}
 	fn expression_valid(&mut self, expr: &Expression) -> Result<(), SemanticError> {
 		let find_direct_value = |direct_value: &DirectValue| -> Result<(), SemanticError> {
-			match direct_value {
-				DirectValue::Ident(i) => {
-					if self.find_ident(i) {
-						Ok(())
-					} else {
-						Err(SemanticError::UseBeforeDeclaration(*i))
-					}
-				}
-				DirectValue::Const(_) => Ok(()),
+			if let DirectValue::Ident(i) = direct_value {
+				self.find_ident(i)?
 			}
+			Ok(())
 		};
 		match expr {
+			Expression::ArrayAccess(ident, index) => {
+				find_direct_value(index).and_then(|_| self.find_array(ident))
+			}
 			Expression::FuncCall(sig, arguments) => {
 				let arg_count = self.defined_functions.get(&sig.table_index).copied();
 				if arg_count.is_none() {
@@ -103,27 +128,52 @@ impl<'a> ScopeStack<'a> {
 		for stmt in scope.0.iter() {
 			match stmt {
 				Stmts::Decl(decls) => {
-					for Decl(ident, expr) in decls {
-						if self
-							.scope_table
-							.last()
-							.unwrap()
-							.contains(&ident.table_index)
-						{
-							return Err(SemanticError::MultipleDeclaration(*ident));
+					for decl in decls {
+						match decl {
+							Decl::Variable { name, init_val } => {
+								if self
+									.scope_table
+									.last()
+									.unwrap()
+									.iter()
+									.any(|i| i.0 == name.table_index)
+								{
+									return Err(SemanticError::MultipleDeclaration(*name));
+								}
+								if let Some(expr) = init_val {
+									self.expression_valid(expr)?;
+								}
+								self.scope_table
+									.last_mut()
+									.unwrap()
+									.push((name.table_index, IdentType::Primitive))
+							}
+							Decl::Array { name, size: _ } => {
+								if self
+									.scope_table
+									.last()
+									.unwrap()
+									.iter()
+									.any(|i| i.0 == name.table_index)
+								{
+									return Err(SemanticError::MultipleDeclaration(*name));
+								}
+								self.scope_table
+									.last_mut()
+									.unwrap()
+									.push((name.table_index, IdentType::Array))
+							}
 						}
-						if let Some(expr) = expr {
-							self.expression_valid(expr)?;
-						}
-						self.scope_table.last_mut().unwrap().push(ident.table_index)
 					}
 				}
 				Stmts::Assignment(ident, expr) => {
-					if self.find_ident(ident) {
-						self.expression_valid(expr)?
-					} else {
-						return Err(SemanticError::UseBeforeDeclaration(*ident));
-					}
+					self.find_ident(ident)?;
+					self.expression_valid(expr)?;
+				}
+				Stmts::ArrayAssignment(ident, index, r_value) => {
+					self.find_array(ident)?;
+					self.expression_valid(index)?;
+					self.expression_valid(r_value)?;
 				}
 				Stmts::If(expr, scope) | Stmts::While(expr, scope) => {
 					self.expression_valid(expr)?;
