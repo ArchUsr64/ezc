@@ -12,7 +12,9 @@
 //!
 //! <Stmts>
 //! | if (<Expression>) {<Stmts>*}
+//! | if (<Expression>) <Stmts>
 //! | while (<Expression>) {<Stmts>*}
+//! | while (<Expression>) <Stmts>
 //! | int <Decl>;
 //! | Ident [<Expression>] = <Expression>;
 //! | Ident = <Expression>;
@@ -341,28 +343,18 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 		if self.next_if_eq(Token::Keyword(Reserved::If)) && self.next_if_eq(Token::LeftParenthesis)
 		{
 			let expression = self.expression()?;
-			if !(self.next_if_eq(Token::RightParenthesis) && self.next_if_eq(Token::LeftBrace)) {
+			if !self.next_if_eq(Token::RightParenthesis) {
 				return None;
 			};
-			let mut stmts = Vec::new();
-			while let Some(stmt) = self.stmts() {
-				stmts.push(stmt);
-			}
-			Some(Stmts::If(expression, Scope(stmts)))
-				.take_if(|_| self.next_if_eq(Token::RightBrace))
+			Some(Stmts::If(expression, Scope(self.stmts_body()?)))
 		} else if self.next_if_eq(Token::Keyword(Reserved::While))
 			&& self.next_if_eq(Token::LeftParenthesis)
 		{
 			let expression = self.expression()?;
-			if !(self.next_if_eq(Token::RightParenthesis) && self.next_if_eq(Token::LeftBrace)) {
+			if !self.next_if_eq(Token::RightParenthesis) {
 				return None;
 			};
-			let mut stmts = Vec::new();
-			while let Some(stmt) = self.stmts() {
-				stmts.push(stmt);
-			}
-			Some(Stmts::While(expression, Scope(stmts)))
-				.take_if(|_| self.next_if_eq(Token::RightBrace))
+			Some(Stmts::While(expression, Scope(self.stmts_body()?)))
 		} else if self.next_if_eq(Token::Keyword(Reserved::Int))
 			&& let Some(decl) = self.decl()
 			&& self.next_if_eq(Token::Semicolon)
@@ -400,6 +392,20 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 					.and_then(|_| self.expression())
 					.take_if(|_| self.next_if_eq(Token::Semicolon))?,
 			))
+		}
+	}
+	/// Equivalent to either:
+	/// { <Stmts>* } OR <Stmts>
+	/// Used for parsing the body for if and while
+	fn stmts_body(&mut self) -> Option<Vec<Stmts>> {
+		if self.next_if_eq(Token::LeftBrace) {
+			let mut stmts = Vec::new();
+			while let Some(stmt) = self.stmts() {
+				stmts.push(stmt);
+			}
+			Some(stmts).take_if(|_| self.next_if_eq(Token::RightBrace))
+		} else {
+			Some(vec![self.stmts()?])
 		}
 	}
 	fn expression(&mut self) -> Option<Expression> {
