@@ -1,4 +1,4 @@
-#![feature(let_chains, option_take_if, if_let_guard)]
+#![feature(let_chains, if_let_guard)]
 
 mod analyzer;
 mod lexer;

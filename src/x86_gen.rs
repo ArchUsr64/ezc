@@ -81,7 +81,7 @@ F{func_id}:
 						format!("shl %rdi"),
 						format!("shl %rdi"),
 						format!("mov %rsi, %rbp"),
-						format!("sub %rsi, {}", allocator.ident_table.get(&name).unwrap()),
+						format!("sub %rsi, {}", allocator.ident_table.get(name).unwrap()),
 						format!("add %rsi, %rdi"),
 						format!("mov %eax, {}", allocator.parse_operand(*r_val)),
 						format!("mov DWORD PTR [%rsi], %eax"),

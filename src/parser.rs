@@ -446,7 +446,7 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 		if let Some(val) = self.ident() {
 			Some(DirectValue::Ident(val))
 		} else {
-			self.constant().map(|val| DirectValue::Const(val))
+			self.constant().map(DirectValue::Const)
 		}
 	}
 	fn constant(&mut self) -> Option<i32> {
