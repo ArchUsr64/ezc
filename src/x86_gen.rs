@@ -87,7 +87,7 @@ F{func_id}:
 						format!("mov DWORD PTR [%rsi], %eax"),
 					],
 					Instruction::ArrayAlloc(name, size) => {
-						allocator.array_alloc(*dbg!(name), *size);
+						allocator.array_alloc(*name, *size);
 						Vec::new()
 					}
 					Instruction::Return(op) => vec![
@@ -210,10 +210,7 @@ impl StackAllocator {
 					format!("shl %rdi"),
 					format!("shl %rdi"),
 					format!("mov %rsi, %rbp"),
-					format!(
-						"sub %rsi, {}",
-						dbg!(&self.ident_table).get(&dbg!(ident)).unwrap()
-					),
+					format!("sub %rsi, {}", &self.ident_table.get(&ident).unwrap()),
 					format!("add %rsi, %rdi"),
 					format!("mov %eax, DWORD PTR [%rsi]"),
 					format!("mov {}, %eax", self.parse_operand(l_value)),

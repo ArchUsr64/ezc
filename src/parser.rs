@@ -279,7 +279,6 @@ impl<I: Iterator<Item = Symbol> + std::fmt::Debug> Parser<I> {
 	fn decl(&mut self) -> Option<Vec<Decl>> {
 		let mut res = Vec::new();
 		while !matches!(self.tk_peek(), Some(Token::Semicolon)) {
-			dbg!(&res);
 			if !res.is_empty() && !self.next_if_eq(Token::Comma) {
 				return None;
 			}

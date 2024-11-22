@@ -76,18 +76,17 @@ impl TACGen {
 		}
 	}
 	fn end_scope(&mut self) {
-		println!("End scope");
 		self.scope_id -= 1;
 		self.scope_map
 			.iter_mut()
-			.filter(|i| i.last() == Some(dbg!(&self.scope_id)))
+			.filter(|i| i.last() == Some(&self.scope_id))
 			.for_each(|i| {
 				i.pop();
 			})
 	}
 	fn generate_ident(&self, ident: &parser::Ident) -> Ident {
 		let name_index = ident.table_index;
-		if let Some(scope_id) = dbg!(&self.scope_map)[name_index].last() {
+		if let Some(scope_id) = self.scope_map[name_index].last() {
 			Ident::Binded(name_index, *scope_id)
 		} else {
 			Ident::Parameter(
